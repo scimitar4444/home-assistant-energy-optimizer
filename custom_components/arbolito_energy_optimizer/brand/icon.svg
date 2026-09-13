@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Arbolito Energy Optimizer">
+  <circle cx="256" cy="256" r="244" fill="#123b3a"/>
+  <circle cx="168" cy="158" r="61" fill="#ffd54a"/>
+  <g stroke="#ffd54a" stroke-width="18" stroke-linecap="round">
+    <path d="M168 61v-27M168 282v-27M71 158H44M292 158h-27M99 89 80 70M256 236l-19-19M99 227l-19 19M256 80l-19 19"/>
+  </g>
+  <rect x="171" y="220" width="212" height="194" rx="30" fill="none" stroke="#f4f7f6" stroke-width="24"/>
+  <path d="M383 277h25v80h-25" fill="#f4f7f6"/>
+  <path d="M270 255 213 343h48l-18 62 72-103h-51z" fill="#55d17c"/>
+</svg>
