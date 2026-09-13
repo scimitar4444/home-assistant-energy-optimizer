@@ -218,8 +218,9 @@ class OptimizerConfig:
     pv_curtailment_penalty_eur_kwh: float = DEFAULT_PV_CURTAILMENT_PENALTY_EUR_KWH  # noqa: F405
     grid_charge_margin_eur_kwh: float = DEFAULT_GRID_CHARGE_MARGIN_EUR_KWH  # noqa: F405
     allow_grid_charging: bool = True
-    quiet_hours_start: int = DEFAULT_QUIET_HOURS_START  # noqa: F405
-    quiet_hours_end: int = DEFAULT_QUIET_HOURS_END  # noqa: F405
+    quiet_hours_start: float = DEFAULT_QUIET_HOURS_START  # noqa: F405
+    quiet_hours_end: float = DEFAULT_QUIET_HOURS_END  # noqa: F405
+    quiet_hours_weekend_end: float = DEFAULT_QUIET_HOURS_WEEKEND_END  # noqa: F405
     quiet_grid_charge_kw: float = DEFAULT_QUIET_GRID_CHARGE_KW  # noqa: F405
     day_grid_charge_kw: float = DEFAULT_DAY_GRID_CHARGE_KW  # noqa: F405
     quiet_charge_current_a: int = DEFAULT_QUIET_CHARGE_CURRENT_A  # noqa: F405
@@ -278,8 +279,14 @@ class OptimizerConfig:
                 data.get(CONF_GRID_CHARGE_MARGIN_EUR_KWH, DEFAULT_GRID_CHARGE_MARGIN_EUR_KWH)
             ),  # noqa: F405
             allow_grid_charging=bool(data.get(CONF_ALLOW_GRID_CHARGING, True)),  # noqa: F405
-            quiet_hours_start=int(data.get(CONF_QUIET_HOURS_START, DEFAULT_QUIET_HOURS_START)),  # noqa: F405
-            quiet_hours_end=int(data.get(CONF_QUIET_HOURS_END, DEFAULT_QUIET_HOURS_END)),  # noqa: F405
+            quiet_hours_start=float(data.get(CONF_QUIET_HOURS_START, DEFAULT_QUIET_HOURS_START)),  # noqa: F405
+            quiet_hours_end=float(data.get(CONF_QUIET_HOURS_END, DEFAULT_QUIET_HOURS_END)),  # noqa: F405
+            quiet_hours_weekend_end=float(
+                data.get(
+                    CONF_QUIET_HOURS_WEEKEND_END,  # noqa: F405
+                    DEFAULT_QUIET_HOURS_WEEKEND_END,  # noqa: F405
+                )
+            ),
             quiet_grid_charge_kw=float(
                 data.get(CONF_QUIET_GRID_CHARGE_KW, DEFAULT_QUIET_GRID_CHARGE_KW)
             ),  # noqa: F405

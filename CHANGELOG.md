@@ -4,6 +4,8 @@
 
 - Ongoing charge and discharge blocks are no longer reported as upcoming
   starts.
+- Reduced the default quiet grid-charge limit to 15 A / 0.8 kW from 23:00 to
+  06:30 on weekdays and 09:30 on weekend mornings.
 
 ## 0.1.0-beta.4 - 2026-09-13
 

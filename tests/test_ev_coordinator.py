@@ -109,6 +109,32 @@ class FutureFlowBlockTests(unittest.TestCase):
         )
 
 
+class QuietChargeWindowTests(unittest.TestCase):
+    @staticmethod
+    def _is_quiet(value: datetime) -> bool:
+        return _MODULE._is_quiet_charge_time(
+            value,
+            start_hour=23.0,
+            weekday_end_hour=6.5,
+            weekend_end_hour=9.5,
+        )
+
+    def test_weekday_boundaries_are_minute_exact(self) -> None:
+        friday = datetime(2026, 9, 18)
+        monday = datetime(2026, 9, 21)
+
+        self.assertFalse(self._is_quiet(friday.replace(hour=22, minute=59)))
+        self.assertTrue(self._is_quiet(friday.replace(hour=23, minute=0)))
+        self.assertTrue(self._is_quiet(monday.replace(hour=6, minute=29)))
+        self.assertFalse(self._is_quiet(monday.replace(hour=6, minute=30)))
+
+    def test_weekend_mornings_remain_quiet_until_0930(self) -> None:
+        for day in (datetime(2026, 9, 19), datetime(2026, 9, 20)):
+            with self.subTest(day=day.date()):
+                self.assertTrue(self._is_quiet(day.replace(hour=9, minute=29)))
+                self.assertFalse(self._is_quiet(day.replace(hour=9, minute=30)))
+
+
 class FirmPriceBasisTests(unittest.TestCase):
     @staticmethod
     def _slot(price: float, *, forecast: bool = False):

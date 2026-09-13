@@ -42,6 +42,28 @@ def _enabled_ev_mapping() -> dict[str, object]:
 
 
 class EVConfigTests(unittest.TestCase):
+    def test_quiet_charge_defaults_match_planning_and_actuation(self) -> None:
+        config = OptimizerConfig.from_mapping({})
+
+        self.assertEqual(config.quiet_hours_start, 23.0)
+        self.assertEqual(config.quiet_hours_end, 6.5)
+        self.assertEqual(config.quiet_hours_weekend_end, 9.5)
+        self.assertEqual(config.quiet_grid_charge_kw, 0.8)
+        self.assertEqual(config.quiet_charge_current_a, 15)
+
+    def test_integer_legacy_quiet_hours_remain_accepted(self) -> None:
+        config = OptimizerConfig.from_mapping(
+            {
+                const.CONF_QUIET_HOURS_START: 22,
+                const.CONF_QUIET_HOURS_END: 7,
+                const.CONF_QUIET_HOURS_WEEKEND_END: 10,
+            }
+        )
+
+        self.assertEqual(config.quiet_hours_start, 22.0)
+        self.assertEqual(config.quiet_hours_end, 7.0)
+        self.assertEqual(config.quiet_hours_weekend_end, 10.0)
+
     def test_legacy_entry_defaults_to_disabled_ev_planning(self) -> None:
         ev = OptimizerConfig.from_mapping({}).ev
 

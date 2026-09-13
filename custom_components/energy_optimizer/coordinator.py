@@ -78,6 +78,21 @@ def _quarter(value: datetime) -> datetime:
     return value.replace(minute=(value.minute // 15) * 15, second=0, microsecond=0)
 
 
+def _is_quiet_charge_time(
+    value: datetime,
+    *,
+    start_hour: float,
+    weekday_end_hour: float,
+    weekend_end_hour: float,
+) -> bool:
+    """Return whether the local time belongs to the acoustic quiet window."""
+    current_hour = value.hour + value.minute / 60 + value.second / 3600
+    end_hour = weekend_end_hour if value.weekday() >= 5 else weekday_end_hour
+    if start_hour < end_hour:
+        return start_hour <= current_hour < end_hour
+    return current_hour >= start_hour or current_hour < end_hour
+
+
 def _next_flow_block_start(
     plan: list[dict[str, float | str | bool]],
     flow_key: str,
@@ -1162,9 +1177,11 @@ class EnergyOptimizerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 estimated = False
                 known_count += 1
             dynamic_grid_charge = self.config.allow_grid_charging and not estimated
-            quiet_hours = (
-                slot_time.hour >= self.config.quiet_hours_start
-                or slot_time.hour < self.config.quiet_hours_end
+            quiet_hours = _is_quiet_charge_time(
+                slot_time,
+                start_hour=self.config.quiet_hours_start,
+                weekday_end_hour=self.config.quiet_hours_end,
+                weekend_end_hour=self.config.quiet_hours_weekend_end,
             )
             max_grid_charge_kw = (
                 self.config.quiet_grid_charge_kw if quiet_hours else self.config.day_grid_charge_kw
@@ -1399,9 +1416,11 @@ class EnergyOptimizerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             result.plan,
             "grid_to_battery_kwh",
         )
-        quiet_hours_now = (
-            now.hour >= self.config.quiet_hours_start
-            or now.hour < self.config.quiet_hours_end
+        quiet_hours_now = _is_quiet_charge_time(
+            now,
+            start_hour=self.config.quiet_hours_start,
+            weekday_end_hour=self.config.quiet_hours_end,
+            weekend_end_hour=self.config.quiet_hours_weekend_end,
         )
         target_charge_current = (
             self.config.quiet_charge_current_a
