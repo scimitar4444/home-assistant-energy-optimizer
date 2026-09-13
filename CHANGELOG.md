@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.0-beta.2
+
+- Renamed the integration to **Home Assistant Energy Optimizer**.
+- Changed the integration domain to `energy_optimizer`.
+
 ## 0.1.0-beta.1
 
 - First public beta.

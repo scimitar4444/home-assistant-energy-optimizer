@@ -1,5 +1,5 @@
 {
-  "title": "Arbolito Energy Optimizer",
+  "title": "Home Assistant Energy Optimizer",
   "config": {
     "step": {
       "user": {"title": "Battery and tariff", "description": "The integration starts in simulation mode. Grid charging is disabled unless you explicitly enable it.", "data": {"battery_capacity_kwh": "Usable battery capacity", "hard_min_soc": "Hard minimum state of charge", "export_eur_kwh": "Feed-in remuneration", "allow_grid_charging": "Allow planned grid charging"}},

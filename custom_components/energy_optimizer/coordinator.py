@@ -1,4 +1,4 @@
-"""Data coordinator for the Arbolito energy optimizer."""
+"""Data coordinator for the Home Assistant Energy Optimizer."""
 
 from __future__ import annotations
 
@@ -108,7 +108,7 @@ class EnergyOptimizerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         super().__init__(
             hass,
             _LOGGER,
-            name="Arbolito Energy Optimizer",
+            name="Home Assistant Energy Optimizer",
             update_interval=UPDATE_INTERVAL,
         )
         self.config = config

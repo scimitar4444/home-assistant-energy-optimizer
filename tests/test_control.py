@@ -10,7 +10,7 @@ import types
 import unittest
 
 
-_PACKAGE = "arbolito_energy_optimizer"
+_PACKAGE = "energy_optimizer"
 _ROOT = Path(__file__).parents[1] / "custom_components" / _PACKAGE
 if _PACKAGE not in sys.modules:
     package = types.ModuleType(_PACKAGE)

@@ -1,4 +1,4 @@
-"""Config flow for Arbolito Energy Optimizer."""
+"""Config flow for Home Assistant Energy Optimizer."""
 
 from __future__ import annotations
 

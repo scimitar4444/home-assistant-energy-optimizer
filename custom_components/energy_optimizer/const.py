@@ -1,4 +1,4 @@
-"""Constants for Arbolito Energy Optimizer.
+"""Constants for Home Assistant Energy Optimizer.
 
 Only implementation defaults live here. Installation-specific entity IDs,
 addresses and battery settings are stored in the Home Assistant config entry.
@@ -6,8 +6,8 @@ addresses and battery settings are stored in the Home Assistant config entry.
 
 from datetime import timedelta
 
-DOMAIN = "arbolito_energy_optimizer"
-NAME = "Arbolito Energy Optimizer"
+DOMAIN = "energy_optimizer"
+NAME = "Home Assistant Energy Optimizer"
 UPDATE_INTERVAL = timedelta(minutes=5)
 
 CONF_PRICE_TIMELINE_ENTITY = "price_timeline_entity"

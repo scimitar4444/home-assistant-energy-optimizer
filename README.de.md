@@ -1,8 +1,8 @@
-# Arbolito Energieoptimierer für Home Assistant
+# Home-Assistant-Energieoptimierer für Home Assistant
 
 Deutsch · [English](README.md)
 
-Arbolito ist ein lokaler, deterministischer 48‑Stunden‑Energieoptimierer für Home Assistant. Er verbindet dynamische Strompreise, PV‑Prognosen, die Verbrauchshistorie und den Batterieladezustand. Ziel sind möglichst geringe Netzstromkosten, ohne Energie pauschal für eine einzelne spätere Preisspitze zu blockieren.
+Home Assistant Energy Optimizer ist ein lokaler, deterministischer 48‑Stunden‑Energieoptimierer für Home Assistant. Er verbindet dynamische Strompreise, PV‑Prognosen, die Verbrauchshistorie und den Batterieladezustand. Ziel sind möglichst geringe Netzstromkosten, ohne Energie pauschal für eine einzelne spätere Preisspitze zu blockieren.
 
 Er verwendet **kein LLM, keine Cloud‑KI und keine Online‑Modellberechnung**. Alles wird lokal in Home Assistant berechnet und ist reproduzierbar.
 
@@ -40,10 +40,10 @@ Unterstützte Preisattribute:
 
 1. In HACS **Benutzerdefinierte Repositories** öffnen.
 2. `https://github.com/scimitar4444/home-assistant-energy-optimizer` als Typ **Integration** hinzufügen.
-3. **Arbolito Energy Optimizer** installieren und Home Assistant neu starten.
-4. **Einstellungen → Geräte & Dienste → Integration hinzufügen → Arbolito Energy Optimizer** öffnen.
+3. **Home Assistant Energy Optimizer** installieren und Home Assistant neu starten.
+4. **Einstellungen → Geräte & Dienste → Integration hinzufügen → Home Assistant Energy Optimizer** öffnen.
 
-Alternativ den Ordner `custom_components/arbolito_energy_optimizer` nach `config/custom_components/` kopieren und Home Assistant neu starten.
+Alternativ den Ordner `custom_components/energy_optimizer` nach `config/custom_components/` kopieren und Home Assistant neu starten.
 
 ## Sicherer Einstieg
 

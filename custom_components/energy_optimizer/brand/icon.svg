@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Arbolito Energy Optimizer">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Home Assistant Energy Optimizer">
   <circle cx="256" cy="256" r="244" fill="#123b3a"/>
   <circle cx="168" cy="158" r="61" fill="#ffd54a"/>
   <g stroke="#ffd54a" stroke-width="18" stroke-linecap="round">

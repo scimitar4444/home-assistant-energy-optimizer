@@ -1,4 +1,4 @@
-"""Battery dispatch calculation for the Arbolito energy optimizer."""
+"""Battery dispatch calculation for the Home Assistant Energy Optimizer."""
 
 from __future__ import annotations
 

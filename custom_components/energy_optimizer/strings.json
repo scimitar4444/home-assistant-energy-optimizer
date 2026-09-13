@@ -1,5 +1,5 @@
 {
-  "title": "Arbolito Energy Optimizer",
+  "title": "Home Assistant Energy Optimizer",
   "config": {
     "step": {
       "user": {

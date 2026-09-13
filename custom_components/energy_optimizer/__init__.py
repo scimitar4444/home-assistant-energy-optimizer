@@ -1,4 +1,4 @@
-"""Arbolito Energy Optimizer integration."""
+"""Home Assistant Energy Optimizer integration."""
 
 from __future__ import annotations
 

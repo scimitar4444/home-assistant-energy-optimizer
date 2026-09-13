@@ -8,7 +8,7 @@ from pathlib import Path
 import unittest
 
 
-_PATH = Path(__file__).parents[1] / "custom_components" / "arbolito_energy_optimizer" / "price_adapter.py"
+_PATH = Path(__file__).parents[1] / "custom_components" / "energy_optimizer" / "price_adapter.py"
 _SPEC = importlib.util.spec_from_file_location("price_adapter_under_test", _PATH)
 assert _SPEC is not None and _SPEC.loader is not None
 _MODULE = importlib.util.module_from_spec(_SPEC)

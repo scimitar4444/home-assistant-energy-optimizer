@@ -1,4 +1,4 @@
-"""Sensor entities for the Arbolito energy optimizer."""
+"""Sensor entities for the Home Assistant Energy Optimizer."""
 
 from __future__ import annotations
 
@@ -174,8 +174,8 @@ class OptimizerSensor(CoordinatorEntity[EnergyOptimizerCoordinator], SensorEntit
         self._attr_unique_id = f"{entry.entry_id}_{description.key}"
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, entry.entry_id)},
-            name="Arbolito Energy Optimizer",
-            manufacturer="Arbolito",
+            name="Home Assistant Energy Optimizer",
+            manufacturer="Community",
             model="Deterministic 48-hour optimizer",
         )
 

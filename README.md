@@ -1,8 +1,8 @@
-# Arbolito Energy Optimizer for Home Assistant
+# Home Assistant Energy Optimizer for Home Assistant
 
 [Deutsch](README.de.md) · English
 
-Arbolito is a local, deterministic 48-hour energy optimizer for Home Assistant. It combines dynamic electricity prices, PV forecasts, household history and battery state of charge to minimize expected grid cost while preserving energy for the most valuable intervals.
+Home Assistant Energy Optimizer is a local, deterministic 48-hour energy optimizer for Home Assistant. It combines dynamic electricity prices, PV forecasts, household history and battery state of charge to minimize expected grid cost while preserving energy for the most valuable intervals.
 
 It does **not** use an LLM, cloud AI or online inference. All calculations run locally in Home Assistant and remain reproducible.
 
@@ -42,12 +42,12 @@ Supported tariff attribute layouts include:
 
 1. In HACS, open **Custom repositories**.
 2. Add `https://github.com/scimitar4444/home-assistant-energy-optimizer` as category **Integration**.
-3. Install **Arbolito Energy Optimizer** and restart Home Assistant.
-4. Open **Settings → Devices & services → Add integration** and select **Arbolito Energy Optimizer**.
+3. Install **Home Assistant Energy Optimizer** and restart Home Assistant.
+4. Open **Settings → Devices & services → Add integration** and select **Home Assistant Energy Optimizer**.
 
 ### Manual installation
 
-Copy `custom_components/arbolito_energy_optimizer` into your Home Assistant `config/custom_components/` directory and restart Home Assistant.
+Copy `custom_components/energy_optimizer` into your Home Assistant `config/custom_components/` directory and restart Home Assistant.
 
 ## Configuration
 

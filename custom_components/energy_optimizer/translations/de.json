@@ -1,5 +1,5 @@
 {
-  "title": "Arbolito Energieoptimierer",
+  "title": "Home-Assistant-Energieoptimierer",
   "config": {
     "step": {
       "user": {"title": "Batterie und Tarif", "description": "Die Integration startet im Simulationsmodus. Netzladen bleibt aus, sofern du es nicht ausdrücklich freigibst.", "data": {"battery_capacity_kwh": "Nutzbare Batteriekapazität", "hard_min_soc": "Harte Entladegrenze", "export_eur_kwh": "Einspeisevergütung", "allow_grid_charging": "Geplantes Netzladen erlauben"}},
