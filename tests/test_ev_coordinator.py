@@ -72,6 +72,43 @@ sys.modules[_SPEC.name] = _MODULE
 _SPEC.loader.exec_module(_MODULE)
 
 
+class FutureFlowBlockTests(unittest.TestCase):
+    @staticmethod
+    def _plan(*flows: float):
+        return [
+            {"start": f"slot-{index}", "flow_kwh": flow}
+            for index, flow in enumerate(flows)
+        ]
+
+    def test_running_block_is_not_reported_as_a_future_start(self) -> None:
+        self.assertIsNone(
+            _MODULE._next_flow_block_start(
+                self._plan(0.2, 0.2, 0.0),
+                "flow_kwh",
+            )
+        )
+
+    def test_new_block_after_running_block_uses_later_transition(self) -> None:
+        self.assertEqual(
+            _MODULE._next_flow_block_start(
+                self._plan(0.2, 0.0, 0.3),
+                "flow_kwh",
+            ),
+            "slot-2",
+        )
+
+    def test_first_future_transition_is_returned_when_current_slot_is_idle(
+        self,
+    ) -> None:
+        self.assertEqual(
+            _MODULE._next_flow_block_start(
+                self._plan(0.0, 0.3, 0.3),
+                "flow_kwh",
+            ),
+            "slot-1",
+        )
+
+
 class FirmPriceBasisTests(unittest.TestCase):
     @staticmethod
     def _slot(price: float, *, forecast: bool = False):

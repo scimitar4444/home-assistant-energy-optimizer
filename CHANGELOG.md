@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.0-beta.5 - 2026-09-13
+
+- Ongoing charge and discharge blocks are no longer reported as upcoming
+  starts.
+
 ## 0.1.0-beta.4 - 2026-09-13
 
 - Replaced the 70% command master switch with action-specific live-power and

@@ -78,6 +78,30 @@ def _quarter(value: datetime) -> datetime:
     return value.replace(minute=(value.minute // 15) * 15, second=0, microsecond=0)
 
 
+def _next_flow_block_start(
+    plan: list[dict[str, float | str | bool]],
+    flow_key: str,
+    *,
+    threshold_kwh: float = 0.005,
+) -> str | None:
+    """Return the first future inactive-to-active transition for one flow.
+
+    The first plan item represents the currently running partial slot.  It is
+    used only to determine whether a later positive slot continues the current
+    block and is therefore never returned as a future start.
+    """
+    if not plan:
+        return None
+
+    previous_active = float(plan[0][flow_key]) > threshold_kwh
+    for item in plan[1:]:
+        active = float(item[flow_key]) > threshold_kwh
+        if active and not previous_active:
+            return str(item["start"])
+        previous_active = active
+    return None
+
+
 def _first_slot_grid_setpoint_w(
     *,
     now: datetime,
@@ -1367,21 +1391,13 @@ class EnergyOptimizerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 "ESS-PV-Durchleitung wird nachgeregelt"
             )
 
-        next_discharge = next(
-            (
-                now.isoformat() if index == 0 else str(item["start"])
-                for index, item in enumerate(result.plan)
-                if float(item["battery_to_load_kwh"]) > 0.005
-            ),
-            None,
+        next_discharge = _next_flow_block_start(
+            result.plan,
+            "battery_to_load_kwh",
         )
-        next_grid_charge = next(
-            (
-                now.isoformat() if index == 0 else str(item["start"])
-                for index, item in enumerate(result.plan)
-                if float(item["grid_to_battery_kwh"]) > 0.005
-            ),
-            None,
+        next_grid_charge = _next_flow_block_start(
+            result.plan,
+            "grid_to_battery_kwh",
         )
         quiet_hours_now = (
             now.hour >= self.config.quiet_hours_start
