@@ -1,0 +1,13 @@
+[project]
+name = "arbolito-energy-optimizer"
+version = "0.1.0b1"
+description = "Deterministic 48-hour energy optimizer for Home Assistant"
+requires-python = ">=3.13"
+license = "MIT"
+
+[tool.ruff]
+target-version = "py313"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]

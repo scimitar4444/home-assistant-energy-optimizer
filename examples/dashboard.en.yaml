@@ -1,0 +1,22 @@
+# Replace the placeholder entity IDs with the IDs created by Home Assistant.
+type: markdown
+title: Energy optimizer
+content: >-
+  {% set status = 'sensor.ENERGY_OPTIMIZER_STATUS' %}
+  {% macro kwh(entity) -%}
+    {%- set value = states(entity) -%}
+    {{- ('%.2f' | format(value | float(0))) if has_value(entity) and is_number(value) else '–' -}}
+  {%- endmacro %}
+
+  ## {{ states(status) }}
+
+  | Now / forecast | Value |
+  |---|---:|
+  | Minimum reserve | {{ states('sensor.ENERGY_OPTIMIZER_COMMAND_MINIMUM_SOC') }} % |
+  | PV 48 h | {{ kwh('sensor.ENERGY_OPTIMIZER_PV_FORECAST_48_H') }} kWh |
+  | Load 48 h | {{ kwh('sensor.ENERGY_OPTIMIZER_LOAD_FORECAST_48_H') }} kWh |
+  | Grid import 48 h | {{ kwh('sensor.ENERGY_OPTIMIZER_EXPECTED_GRID_IMPORT_48_H') }} kWh |
+  | Grid charge 48 h | {{ kwh('sensor.ENERGY_OPTIMIZER_EXPECTED_BATTERY_GRID_CHARGE_48_H') }} kWh |
+  | Data coverage | {{ states('sensor.ENERGY_OPTIMIZER_DATA_COVERAGE') }} % |
+
+  _Calculated: {{ state_attr(status, 'calculated_at') or '–' }}_

@@ -1,0 +1,14 @@
+{
+  "domain": "arbolito_energy_optimizer",
+  "name": "Arbolito Energy Optimizer",
+  "after_dependencies": ["recorder"],
+  "codeowners": ["@scimitar4444"],
+  "config_flow": true,
+  "documentation": "https://github.com/scimitar4444/home-assistant-energy-optimizer",
+  "integration_type": "service",
+  "iot_class": "calculated",
+  "issue_tracker": "https://github.com/scimitar4444/home-assistant-energy-optimizer/issues",
+  "requirements": [],
+  "single_config_entry": true,
+  "version": "0.1.0-beta.1"
+}

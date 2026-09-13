@@ -1,0 +1,29 @@
+{
+  "title": "Arbolito Energieoptimierer",
+  "config": {
+    "step": {
+      "user": {"title": "Batterie und Tarif", "description": "Die Integration startet im Simulationsmodus. Netzladen bleibt aus, sofern du es nicht ausdrücklich freigibst.", "data": {"battery_capacity_kwh": "Nutzbare Batteriekapazität", "hard_min_soc": "Harte Entladegrenze", "export_eur_kwh": "Einspeisevergütung", "allow_grid_charging": "Geplantes Netzladen erlauben"}},
+      "prices": {"title": "Preise und Prognosen", "description": "Wähle Preisverlauf, Preishistorie, Batterie-SoC und die verbleibenden PV-Prognosen.", "data": {"price_timeline_entity": "Sensor mit Preisverlauf", "price_history_entity": "Aktueller Preis/Preishistorie", "soc_entity": "Batterieladezustand", "pv_today_remaining_entity": "Verbleibende PV-Energie heute", "pv_tomorrow_entity": "PV-Energie morgen"}},
+      "power": {"title": "Live-Leistung", "description": "Wähle Leistungssensoren in Watt. Mehrere Hausverbrauchsphasen werden addiert.", "data": {"live_pv_power_entity": "PV-Leistung", "live_grid_power_entity": "Netzbezugsleistung", "live_load_power_entities": "Hausverbrauchs-Leistungssensoren"}},
+      "energy": {"title": "Langzeit-Energiezähler", "description": "Wähle fortlaufend steigende Gesamtenergie-Sensoren in kWh. Daraus lernt das Modell die nicht verschiebbare Grundlast.", "data": {"grid_import_energy_entity": "Netzbezug Energie", "grid_export_energy_entity": "Netzeinspeisung Energie", "pv_energy_entity": "PV-Erzeugung Energie", "battery_charge_energy_entity": "Batterieladung Energie", "battery_discharge_energy_entity": "Batterieentladung Energie"}},
+      "optional": {"title": "Optionale Daten und erweiterte Steuerung", "description": "Wetterdaten verbessern die Diagnose. Steuerungshelfer und Victron-Modbus-Host sind optional; leer lassen für reinen Beobachtungsbetrieb.", "data": {"control_enable_entity": "Helfer zur Steuerungsfreigabe", "weather_temperature_entity": "Außentemperatur", "weather_cloud_entity": "Bewölkung", "weather_illuminance_entity": "Außenhelligkeit", "weather_rain_binary_entity": "Regensensor", "weather_forecast_entity": "Wettervorhersage", "victron_modbus_host": "Victron-GX Modbus-TCP-Host"}}
+    },
+    "abort": {"already_configured": "Der Energieoptimierer ist bereits eingerichtet."}
+  },
+  "entity": {"sensor": {
+    "status": {"name": "Status", "state": {"discharge": "Haus aus Batterie", "reserve": "Batterie halten", "pv_surplus": "PV versorgt Haus und Batterie", "pv_store": "Netz versorgt Haus; PV lädt Batterie", "grid_charge": "Batterie aus Netz laden", "degraded": "Sicherer Ersatzbetrieb"}},
+    "target_min_soc": {"name": "Ziel-Mindest-SoC"},
+    "control_min_soc": {"name": "Steuerbefehl Mindest-SoC"},
+    "confidence": {"name": "Datenabdeckung"},
+    "forecast_load_48h": {"name": "Verbrauchsprognose 48 h"},
+    "forecast_load_robust_48h": {"name": "Robuste Grundlastprognose 48 h"},
+    "forecast_load_baseline_48h": {"name": "Median-Verbrauchsprognose 48 h"},
+    "weather_rain_indicator": {"name": "Regenindikator"},
+    "forecast_pv_48h": {"name": "PV-Prognose 48 h"},
+    "expected_grid_import": {"name": "Erwarteter Netzbezug 48 h"},
+    "expected_grid_charge": {"name": "Erwartete Batterieladung aus dem Netz 48 h"},
+    "target_charge_current": {"name": "Ziel-Ladestrom"},
+    "target_grid_setpoint": {"name": "Steuerbefehl Netzsollwert"},
+    "projected_min_soc": {"name": "Prognostizierter niedrigster SoC"}
+  }}
+}

@@ -1,0 +1,29 @@
+{
+  "title": "Arbolito Energy Optimizer",
+  "config": {
+    "step": {
+      "user": {"title": "Battery and tariff", "description": "The integration starts in simulation mode. Grid charging is disabled unless you explicitly enable it.", "data": {"battery_capacity_kwh": "Usable battery capacity", "hard_min_soc": "Hard minimum state of charge", "export_eur_kwh": "Feed-in remuneration", "allow_grid_charging": "Allow planned grid charging"}},
+      "prices": {"title": "Prices and forecasts", "description": "Select the price timeline, price history, battery SoC and remaining PV forecast sensors.", "data": {"price_timeline_entity": "Price timeline sensor", "price_history_entity": "Current price/history sensor", "soc_entity": "Battery state of charge", "pv_today_remaining_entity": "Remaining PV energy today", "pv_tomorrow_entity": "PV energy tomorrow"}},
+      "power": {"title": "Live power", "description": "Select power sensors in watts. Multiple load phase sensors are added together.", "data": {"live_pv_power_entity": "PV power", "live_grid_power_entity": "Grid import power", "live_load_power_entities": "House load power sensors"}},
+      "energy": {"title": "Long-term energy counters", "description": "Select monotonically increasing total-energy sensors in kWh. They are used to learn the non-shiftable base load.", "data": {"grid_import_energy_entity": "Grid import energy", "grid_export_energy_entity": "Grid export energy", "pv_energy_entity": "PV energy", "battery_charge_energy_entity": "Battery charge energy", "battery_discharge_energy_entity": "Battery discharge energy"}},
+      "optional": {"title": "Optional inputs and advanced control", "description": "Weather improves diagnostics. A control helper and Victron Modbus host are optional; leave both empty for observation-only use.", "data": {"control_enable_entity": "Control enable helper", "weather_temperature_entity": "Outdoor temperature", "weather_cloud_entity": "Cloud cover", "weather_illuminance_entity": "Outdoor illuminance", "weather_rain_binary_entity": "Rain sensor", "weather_forecast_entity": "Weather forecast", "victron_modbus_host": "Victron GX Modbus TCP host"}}
+    },
+    "abort": {"already_configured": "The energy optimizer is already configured."}
+  },
+  "entity": {"sensor": {
+    "status": {"name": "Status", "state": {"discharge": "House from battery", "reserve": "Hold battery", "pv_surplus": "PV supplies house and battery", "pv_store": "Grid supplies house; PV charges battery", "grid_charge": "Charge battery from grid", "degraded": "Safe fallback"}},
+    "target_min_soc": {"name": "Target minimum SoC"},
+    "control_min_soc": {"name": "Command minimum SoC"},
+    "confidence": {"name": "Data coverage"},
+    "forecast_load_48h": {"name": "Load forecast 48 h"},
+    "forecast_load_robust_48h": {"name": "Robust base-load forecast 48 h"},
+    "forecast_load_baseline_48h": {"name": "Median load forecast 48 h"},
+    "weather_rain_indicator": {"name": "Rain indicator"},
+    "forecast_pv_48h": {"name": "PV forecast 48 h"},
+    "expected_grid_import": {"name": "Expected grid import 48 h"},
+    "expected_grid_charge": {"name": "Expected battery grid charge 48 h"},
+    "target_charge_current": {"name": "Target charge current"},
+    "target_grid_setpoint": {"name": "Command grid setpoint"},
+    "projected_min_soc": {"name": "Projected lowest SoC"}
+  }}
+}

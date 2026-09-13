@@ -1,0 +1,22 @@
+# Ersetze die Platzhalter-Entity-IDs durch die von Home Assistant erzeugten IDs.
+type: markdown
+title: Energieoptimierer
+content: >-
+  {% set status = 'sensor.ENERGIEOPTIMIERER_STATUS' %}
+  {% macro kwh(entity) -%}
+    {%- set value = states(entity) -%}
+    {{- ('%.2f' | format(value | float(0))) if has_value(entity) and is_number(value) else '–' -}}
+  {%- endmacro %}
+
+  ## {{ states(status) }}
+
+  | Jetzt / Prognose | Wert |
+  |---|---:|
+  | Mindestreserve | {{ states('sensor.ENERGIEOPTIMIERER_STEUERBEFEHL_MINDEST_SOC') }} % |
+  | PV 48 h | {{ kwh('sensor.ENERGIEOPTIMIERER_PV_PROGNOSE_48_H') }} kWh |
+  | Verbrauch 48 h | {{ kwh('sensor.ENERGIEOPTIMIERER_VERBRAUCHSPROGNOSE_48_H') }} kWh |
+  | Netzbezug 48 h | {{ kwh('sensor.ENERGIEOPTIMIERER_ERWARTETER_NETZBEZUG_48_H') }} kWh |
+  | Netzladung 48 h | {{ kwh('sensor.ENERGIEOPTIMIERER_ERWARTETE_BATTERIELADUNG_AUS_DEM_NETZ_48_H') }} kWh |
+  | Datenabdeckung | {{ states('sensor.ENERGIEOPTIMIERER_DATENABDECKUNG') }} % |
+
+  _Berechnet: {{ state_attr(status, 'berechnet_um') or '–' }}_

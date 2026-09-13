@@ -1,0 +1,29 @@
+set_victron_charge_current:
+  name: Set Victron charge current
+  description: Sets the ESS maximum battery charge current through Modbus TCP.
+  fields:
+    current:
+      name: Charge current
+      description: Maximum battery charge current in ampere.
+      required: true
+      selector:
+        number:
+          min: 0
+          max: 50
+          step: 1
+          unit_of_measurement: A
+
+set_victron_grid_setpoint:
+  name: Set Victron grid setpoint
+  description: Writes and verifies the volatile positive ESS grid setpoint through Modbus TCP.
+  fields:
+    power:
+      name: Grid setpoint
+      description: Requested grid import. Use 0 W to release the override.
+      required: true
+      selector:
+        number:
+          min: 0
+          max: 3000
+          step: 1
+          unit_of_measurement: W
