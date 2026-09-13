@@ -8,7 +8,6 @@ from math import isfinite
 
 from .const import (
     CONTROL_COMMAND_VALID_MINUTES,
-    CONTROL_DATA_QUALITY_MIN_PERCENT,
     HARD_MIN_SOC,
     MAX_CONTROL_SOC,
     NORMAL_CHARGE_CURRENT_A,
@@ -98,6 +97,8 @@ def build_control_command(
     requested_grid_setpoint_w: float,
     current_price_is_known: bool,
     reason: str,
+    live_power_is_valid: bool = True,
+    action_has_firm_price_basis: bool = True,
     hard_min_soc: float = HARD_MIN_SOC,
     max_control_soc: float = MAX_CONTROL_SOC,
     normal_charge_current_a: int = NORMAL_CHARGE_CURRENT_A,
@@ -107,8 +108,10 @@ def build_control_command(
     """Translate the economic result once into the effective Victron command.
 
     The four-point release is a measured BatteryLife adapter characteristic,
-    not another economic decision.  Invalid or weak input produces an explicit
-    fail-open command instead of silently retaining an old high reserve.
+    not another economic decision.  Data coverage remains a diagnostic; each
+    action is authorized only by the concrete inputs it needs.  Invalid or
+    missing required input produces an explicit fail-open command instead of
+    silently retaining an old high reserve.
     """
     valid_inputs = (
         action in VALID_ACTIONS
@@ -117,14 +120,43 @@ def build_control_command(
         and _finite_number(current_soc)
         and 0 <= float(current_soc) <= 100
         and _finite_number(data_quality_percent)
-        and float(data_quality_percent) >= CONTROL_DATA_QUALITY_MIN_PERCENT
+        and 0 <= float(data_quality_percent) <= 100
         and _finite_number(requested_charge_current_a)
         and 0 < float(requested_charge_current_a) <= normal_charge_current_a
         and _finite_number(requested_grid_setpoint_w)
         and float(requested_grid_setpoint_w) >= 0
+        and isinstance(current_price_is_known, bool)
+        and isinstance(live_power_is_valid, bool)
+        and isinstance(action_has_firm_price_basis, bool)
+    )
+    requested_grid_setpoint = (
+        round(
+            min(
+                maximum_grid_setpoint_w,
+                max(0.0, float(requested_grid_setpoint_w)),
+            )
+        )
+        if valid_inputs
+        else 0
+    )
+    action_requirements_met = valid_inputs and (
+        (action == "DISCHARGE" and current_price_is_known)
+        or (
+            action == "RESERVE"
+            and current_price_is_known
+            and action_has_firm_price_basis
+        )
+        or (action == "PV_SURPLUS" and live_power_is_valid)
+        or (
+            action in POSITIVE_GRID_SETPOINT_ACTIONS
+            and live_power_is_valid
+            and current_price_is_known
+            and action_has_firm_price_basis
+            and requested_grid_setpoint > 0
+        )
     )
 
-    if not valid_inputs:
+    if not action_requirements_met:
         effective_action = "DEGRADED"
         effective_soc = round(hard_min_soc)
         effective_current = normal_charge_current_a
@@ -144,37 +176,12 @@ def build_control_command(
             max(hard_min_soc, min(max_control_soc, effective_soc))
         )
         effective_current = round(float(requested_charge_current_a))
-        requested_grid_setpoint = round(
-            min(
-                maximum_grid_setpoint_w,
-                max(0.0, float(requested_grid_setpoint_w)),
-            )
+        effective_grid_setpoint = (
+            requested_grid_setpoint
+            if action in POSITIVE_GRID_SETPOINT_ACTIONS
+            else 0
         )
-        if action in POSITIVE_GRID_SETPOINT_ACTIONS and (
-            not current_price_is_known or requested_grid_setpoint <= 0
-        ):
-            # Without a firm current tariff and a positive, physically bounded
-            # target, reserving is safe but deliberately storing/charging is not.
-            effective_action = "RESERVE"
-            effective_soc = round(
-                max(
-                    hard_min_soc,
-                    min(max_control_soc, model_minimum_soc, current_soc),
-                )
-            )
-            effective_current = normal_charge_current_a
-            effective_grid_setpoint = 0
-            effective_reason = (
-                "Netzgestützten Betrieb ausgesetzt: aktueller Preis oder "
-                "Netzsollwert ist nicht sicher"
-            )
-        else:
-            effective_grid_setpoint = (
-                requested_grid_setpoint
-                if action in POSITIVE_GRID_SETPOINT_ACTIONS
-                else 0
-            )
-            effective_reason = reason
+        effective_reason = reason
 
     revision = now.isoformat(timespec="seconds")
     current_quarter = now.replace(
@@ -192,7 +199,7 @@ def build_control_command(
     return ControlCommand(
         revision=revision,
         valid_until=valid_until.isoformat(timespec="seconds"),
-        quality_ok=valid_inputs,
+        quality_ok=action_requirements_met,
         action=effective_action,
         minimum_soc=effective_soc,
         charge_current_a=effective_current,

@@ -34,7 +34,14 @@ Tariff providers commonly publish only a finite known horizon. The integration m
 ## Failure model
 
 - invalid SoC values, including the common `65535` sentinel, are rejected;
-- low data coverage yields `DEGRADED` rather than retaining an old command;
+- data coverage is diagnostic and never acts as a percentage master switch;
+- each action requires its concrete live and firm-price inputs, otherwise it
+  yields `DEGRADED` rather than retaining an old command;
+- discharge requires a firm current price, PV surplus requires current live
+  power, and deliberate PV storage or grid charging requires both plus a
+  later higher-price discharge inside the contiguous firm-price horizon;
+- reserve requires that same confirmed price basis, except that retaining
+  energy at a non-positive current price is valid on its own;
 - positive grid setpoints require a firm current price and bounded live measurements;
 - every command expires no later than the current quarter-hour boundary;
 - planning and writing are separate, so installing the integration alone cannot switch the inverter.

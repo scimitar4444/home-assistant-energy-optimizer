@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.0-beta.4 - 2026-09-13
+
+- Replaced the 70% command master switch with action-specific live-power and
+  firm-price guards; data coverage remains diagnostic.
+
 ## 0.1.0-beta.3 - 2026-09-13
 
 - Added an optional, vendor-neutral EV departure planner.

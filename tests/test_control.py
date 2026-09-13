@@ -64,13 +64,26 @@ class ControlCommandTests(unittest.TestCase):
         )
         self.assertEqual(command.minimum_soc, 86)
 
-    def test_low_quality_is_an_explicit_fail_open_command(self) -> None:
-        command = self._command(data_quality_percent=69, model_minimum_soc=90)
-        self.assertFalse(command.quality_ok)
-        self.assertEqual(command.action, "DEGRADED")
-        self.assertEqual(command.minimum_soc, 12)
-        self.assertEqual(command.charge_current_a, 50)
-        self.assertEqual(command.grid_setpoint_w, 0)
+    def test_low_coverage_remains_diagnostic(self) -> None:
+        for value in (0, 69):
+            with self.subTest(value=value):
+                command = self._command(
+                    data_quality_percent=value,
+                    model_minimum_soc=90,
+                )
+                self.assertTrue(command.quality_ok)
+                self.assertEqual(command.action, "RESERVE")
+                self.assertEqual(command.minimum_soc, 90)
+                self.assertEqual(command.charge_current_a, 50)
+                self.assertEqual(command.grid_setpoint_w, 0)
+
+    def test_malformed_coverage_is_rejected(self) -> None:
+        for value in (-1, 101, float("nan")):
+            with self.subTest(value=value):
+                command = self._command(data_quality_percent=value)
+                self.assertFalse(command.quality_ok)
+                self.assertEqual(command.action, "DEGRADED")
+                self.assertEqual(command.minimum_soc, 12)
 
     def test_invalid_65535_soc_is_rejected(self) -> None:
         command = self._command(current_soc=65535)
@@ -104,20 +117,86 @@ class ControlCommandTests(unittest.TestCase):
         self.assertEqual(command.action, "PV_STORE")
         self.assertEqual(command.grid_setpoint_w, 780)
 
-    def test_pv_store_without_known_price_falls_back_to_reserve(self) -> None:
+    def test_pv_store_without_known_price_is_degraded(self) -> None:
         command = self._command(
             action="PV_STORE",
             requested_grid_setpoint_w=780,
             current_price_is_known=False,
         )
-        self.assertTrue(command.quality_ok)
-        self.assertEqual(command.action, "RESERVE")
+        self.assertFalse(command.quality_ok)
+        self.assertEqual(command.action, "DEGRADED")
         self.assertEqual(command.grid_setpoint_w, 0)
 
-    def test_pv_store_without_safe_setpoint_falls_back_to_reserve(self) -> None:
+    def test_pv_store_without_safe_setpoint_is_degraded(self) -> None:
         command = self._command(action="PV_STORE")
-        self.assertEqual(command.action, "RESERVE")
+        self.assertFalse(command.quality_ok)
+        self.assertEqual(command.action, "DEGRADED")
         self.assertEqual(command.grid_setpoint_w, 0)
+
+    def test_each_action_enforces_only_its_required_inputs(self) -> None:
+        blocked_cases = (
+            ("DISCHARGE", {"current_price_is_known": False}),
+            ("RESERVE", {"current_price_is_known": False}),
+            ("RESERVE", {"action_has_firm_price_basis": False}),
+            ("PV_SURPLUS", {"live_power_is_valid": False}),
+            (
+                "PV_STORE",
+                {"requested_grid_setpoint_w": 780, "live_power_is_valid": False},
+            ),
+            (
+                "PV_STORE",
+                {
+                    "requested_grid_setpoint_w": 780,
+                    "action_has_firm_price_basis": False,
+                },
+            ),
+            (
+                "GRID_CHARGE",
+                {"requested_grid_setpoint_w": 780, "live_power_is_valid": False},
+            ),
+            (
+                "GRID_CHARGE",
+                {
+                    "requested_grid_setpoint_w": 780,
+                    "current_price_is_known": False,
+                },
+            ),
+            (
+                "GRID_CHARGE",
+                {
+                    "requested_grid_setpoint_w": 780,
+                    "action_has_firm_price_basis": False,
+                },
+            ),
+            ("GRID_CHARGE", {}),
+        )
+        for action, overrides in blocked_cases:
+            with self.subTest(action=action, overrides=overrides):
+                command = self._command(action=action, **overrides)
+                self.assertFalse(command.quality_ok)
+                self.assertEqual(command.action, "DEGRADED")
+                self.assertEqual(command.minimum_soc, 12)
+                self.assertEqual(command.grid_setpoint_w, 0)
+
+        allowed_cases = (
+            (
+                "DISCHARGE",
+                {"live_power_is_valid": False, "action_has_firm_price_basis": False},
+            ),
+            ("RESERVE", {"live_power_is_valid": False}),
+            (
+                "PV_SURPLUS",
+                {
+                    "current_price_is_known": False,
+                    "action_has_firm_price_basis": False,
+                },
+            ),
+        )
+        for action, overrides in allowed_cases:
+            with self.subTest(action=action, overrides=overrides):
+                command = self._command(action=action, **overrides)
+                self.assertTrue(command.quality_ok)
+                self.assertEqual(command.action, action)
 
     def test_grid_charge_setpoint_is_conservatively_limited(self) -> None:
         command = self._command(

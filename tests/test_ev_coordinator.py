@@ -72,6 +72,60 @@ sys.modules[_SPEC.name] = _MODULE
 _SPEC.loader.exec_module(_MODULE)
 
 
+class FirmPriceBasisTests(unittest.TestCase):
+    @staticmethod
+    def _slot(price: float, *, forecast: bool = False):
+        return _MODULE.ForecastSlot("slot", price, 0.1, 0.0, forecast)
+
+    @staticmethod
+    def _plan(*discharges: float):
+        return [
+            {"battery_to_load_kwh": discharge}
+            for discharge in discharges
+        ]
+
+    def test_later_higher_firm_discharge_is_a_valid_basis(self) -> None:
+        self.assertTrue(
+            _MODULE._action_has_firm_price_basis(
+                "RESERVE",
+                [self._slot(0.20), self._slot(0.30)],
+                self._plan(0.0, 0.1),
+            )
+        )
+
+    def test_equal_or_lower_firm_price_is_not_a_valid_basis(self) -> None:
+        self.assertFalse(
+            _MODULE._action_has_firm_price_basis(
+                "GRID_CHARGE",
+                [self._slot(0.20), self._slot(0.20), self._slot(0.10)],
+                self._plan(0.0, 0.1, 0.1),
+            )
+        )
+
+    def test_search_stops_at_first_estimated_price(self) -> None:
+        self.assertFalse(
+            _MODULE._action_has_firm_price_basis(
+                "PV_STORE",
+                [
+                    self._slot(0.20),
+                    self._slot(0.25, forecast=True),
+                    self._slot(0.40),
+                ],
+                self._plan(0.0, 0.0, 0.1),
+            )
+        )
+
+    def test_nonpositive_current_price_can_justify_reserve_only(self) -> None:
+        slots = [self._slot(0.0)]
+        plan = self._plan(0.0)
+        self.assertTrue(
+            _MODULE._action_has_firm_price_basis("RESERVE", slots, plan)
+        )
+        self.assertFalse(
+            _MODULE._action_has_firm_price_basis("GRID_CHARGE", slots, plan)
+        )
+
+
 class LiveAccountingTests(unittest.TestCase):
     @staticmethod
     def _coordinator(*, ev_age_seconds: float):

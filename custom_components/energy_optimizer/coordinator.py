@@ -125,6 +125,45 @@ def _first_slot_grid_setpoint_w(
     return requested_w, planned_grid_to_house_w, planned_grid_charge_w
 
 
+def _action_has_firm_price_basis(
+    action: str,
+    slots: list[ForecastSlot],
+    plan: list[dict[str, float | str | bool]],
+) -> bool:
+    """Return whether a price-based action has a firm economic basis.
+
+    Only the contiguous firm-price prefix is authoritative.  Retaining or
+    adding battery energy requires a later planned discharge at a higher firm
+    price.  Holding energy at a non-positive current price is independently
+    safe, while actions that do not use this guard return true.
+    """
+    if action not in {"RESERVE", "PV_STORE", "GRID_CHARGE"}:
+        return True
+    if not slots or not plan or slots[0].price_is_forecast:
+        return False
+    current_price = slots[0].price_eur_kwh
+    if not isfinite(current_price):
+        return False
+    if action == "RESERVE" and current_price <= 0:
+        return True
+
+    for slot, item in zip(slots[1:], plan[1:], strict=False):
+        if slot.price_is_forecast:
+            break
+        try:
+            discharge_kwh = float(item["battery_to_load_kwh"])
+        except (KeyError, TypeError, ValueError):
+            return False
+        if (
+            isfinite(slot.price_eur_kwh)
+            and slot.price_eur_kwh > current_price
+            and isfinite(discharge_kwh)
+            and discharge_kwh > 0.005
+        ):
+            return True
+    return False
+
+
 class EnergyOptimizerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     """Build forecasts from recorder statistics and optimize battery dispatch."""
 
@@ -1365,6 +1404,11 @@ class EnergyOptimizerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             maximum_grid_setpoint_w=self.config.victron_grid_setpoint_max_w,
         )
         current_price_is_known = not slots[0].price_is_forecast
+        action_has_firm_price_basis = _action_has_firm_price_basis(
+            result.action,
+            slots,
+            result.plan,
+        )
         command = build_control_command(
             now=now,
             action=result.action,
@@ -1375,6 +1419,8 @@ class EnergyOptimizerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             requested_grid_setpoint_w=requested_grid_setpoint_w,
             current_price_is_known=current_price_is_known,
             reason=reason,
+            live_power_is_valid=live is not None,
+            action_has_firm_price_basis=action_has_firm_price_basis,
             hard_min_soc=self.config.hard_min_soc,
             normal_charge_current_a=self.config.normal_charge_current_a,
             maximum_grid_setpoint_w=self.config.victron_grid_setpoint_max_w,
@@ -1480,6 +1526,7 @@ class EnergyOptimizerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "planned_grid_to_house_first_slot_w": planned_grid_to_house_w,
             "planned_grid_charge_first_slot_w": planned_grid_charge_w,
             "current_price_is_known": current_price_is_known,
+            "action_has_firm_price_basis": action_has_firm_price_basis,
             "quiet_grid_charge_active": (
                 command.action == "GRID_CHARGE" and quiet_hours_now
             ),

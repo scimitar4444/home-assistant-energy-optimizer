@@ -72,11 +72,11 @@ The main status sensor uses these stable states:
 | `PV_SURPLUS` | PV covers the house and surplus charges the battery |
 | `PV_STORE` | known cheap grid supplies the house so PV can be stored |
 | `GRID_CHARGE` | known cheap grid energy is charged for a known expensive interval |
-| `DEGRADED` | input quality is insufficient; safe fallback command |
+| `DEGRADED` | an action-specific input is missing or invalid; safe fallback command |
 
 ## Design and safety
 
-The optimizer deliberately separates planning from actuation. Recommendations expire at the next quarter-hour boundary and estimated future prices may influence the trend, but cannot on their own authorize grid charging or PV diversion. See [Architecture](docs/ARCHITECTURE.md) and the example dashboards in [`examples/`](examples/).
+The optimizer deliberately separates planning from actuation. Recommendations expire at the next quarter-hour boundary and estimated future prices may influence the trend, but cannot on their own authorize grid charging or PV diversion. The data-coverage percentage is diagnostic; command authorization uses the current SoC, live measurements and confirmed prices required by each action. See [Architecture](docs/ARCHITECTURE.md) and the example dashboards in [`examples/`](examples/).
 
 Victron services are advanced building blocks, not an automatic installer. Register defaults match one tested GX setup but may differ on yours. A positive grid setpoint is never emitted for an unknown current price, and `0 W` releases it.
 

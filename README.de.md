@@ -64,9 +64,9 @@ Die Zustände bedeuten:
 | `PV_SURPLUS` | PV versorgt das Haus, Überschuss lädt die Batterie |
 | `PV_STORE` | günstiges bekanntes Netz versorgt das Haus, PV lädt die Batterie |
 | `GRID_CHARGE` | günstigen bekannten Netzstrom für ein teures bekanntes Intervall laden |
-| `DEGRADED` | Datenqualität reicht nicht; sicherer Ersatzbefehl |
+| `DEGRADED` | eine aktionsbezogene Eingabe fehlt oder ist ungültig; sicherer Ersatzbefehl |
 
-Planung und Schalten sind absichtlich getrennt. Befehle enden spätestens an der nächsten Viertelstundengrenze. Geschätzte Folgepreise dürfen eine Tendenz zeigen, aber niemals allein Netzladen oder PV‑Umlenkung freigeben. Details stehen in der [Architektur](docs/ARCHITECTURE.md); Beispielkarten liegen unter [`examples/`](examples/).
+Planung und Schalten sind absichtlich getrennt. Befehle enden spätestens an der nächsten Viertelstundengrenze. Geschätzte Folgepreise dürfen eine Tendenz zeigen, aber niemals allein Netzladen oder PV‑Umlenkung freigeben. Die prozentuale Datenabdeckung ist nur eine Diagnose; für die Befehlsfreigabe zählen stattdessen der aktuelle SoC, die Live‑Messwerte und die bestätigten Preise, die die jeweilige Aktion tatsächlich benötigt. Details stehen in der [Architektur](docs/ARCHITECTURE.de.md); Beispielkarten liegen unter [`examples/`](examples/).
 
 ## Optionale Fahrzeugplanung
 
