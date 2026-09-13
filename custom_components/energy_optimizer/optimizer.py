@@ -5,7 +5,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from math import ceil
 
-
 ENERGY_STEP_KWH = 0.02
 FLOW_STEP_KWH = 0.01
 

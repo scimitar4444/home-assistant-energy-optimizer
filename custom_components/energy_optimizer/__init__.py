@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-from functools import partial
 import socket
 import struct
+from functools import partial
 
 import voluptuous as vol
-
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import Event, HomeAssistant, ServiceCall, callback
@@ -234,6 +233,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     )
     if config.control_enable_entity:
         watched_entities.add(config.control_enable_entity)
+    if config.ev.enabled:
+        watched_entities.update(
+            {
+                config.ev.live_power_entity,
+                config.ev.connected_entity,
+                config.ev.vehicle_soc_entity,
+                config.ev.calendar_entity,
+            }
+        )
     entry.async_on_unload(
         async_track_state_change_event(
             hass,

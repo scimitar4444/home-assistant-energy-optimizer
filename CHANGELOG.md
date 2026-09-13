@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.1.0-beta.3 - 2026-09-13
+
+- Added an optional, vendor-neutral EV departure planner.
+- Added EV observation sensors for deadline, energy, target SoC, recommended
+  power, feasibility and data quality.
+- Kept EV actuation disabled: hypothetical charging plans do not alter the
+  authoritative stationary-battery command.
+- Added whole-site/EV-submeter accounting guards so EV charging is not learned
+  as household base load.
+
 ## 0.1.0-beta.2
 
 - Renamed the integration to **Home Assistant Energy Optimizer**.

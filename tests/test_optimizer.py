@@ -3,10 +3,9 @@
 from __future__ import annotations
 
 import importlib.util
-from pathlib import Path
 import sys
 import unittest
-
+from pathlib import Path
 
 _OPTIMIZER_PATH = (
     Path(__file__).parents[1]

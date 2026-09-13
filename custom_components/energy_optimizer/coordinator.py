@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
+import logging
 from collections import defaultdict
 from dataclasses import replace
 from datetime import date, datetime, timedelta
 from functools import partial
-import logging
 from math import isfinite
 from statistics import mean, median
 from typing import Any
@@ -17,6 +17,12 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util import dt as dt_util
 
+from .appliance_planning import (
+    PendingApplianceJob,
+    RunningApplianceJob,
+    add_running_jobs,
+    schedule_pending_jobs,
+)
 from .config import OptimizerConfig
 from .const import (
     LIVE_GRID_WARNING_W,
@@ -26,13 +32,11 @@ from .const import (
     MAX_COMBINED_APPLIANCE_AVERAGE_POWER_KW,
     UPDATE_INTERVAL,
 )
-from .appliance_planning import (
-    PendingApplianceJob,
-    RunningApplianceJob,
-    add_running_jobs,
-    schedule_pending_jobs,
-)
 from .control import bounded_pv_store_grid_setpoint_w, build_control_command
+from .ev_observation import (
+    EVObservationPlanner,
+    disabled_ev_plan_payload,
+)
 from .load_model import (
     WeatherSample,
     forecast_level_calibration,
@@ -41,8 +45,28 @@ from .load_model import (
 )
 from .optimizer import ForecastSlot, optimize_battery
 from .price_adapter import extract_price_timeline
+from .site_accounting import (
+    DEFAULT_MAX_EV_HOURLY_ENERGY_KWH,
+    DEFAULT_MAX_EV_POWER_W,
+    DEFAULT_MAX_SITE_HOURLY_ENERGY_KWH,
+    DEFAULT_MAX_SITE_POWER_W,
+    InvalidMeasurementError,
+    SitePowerBreakdown,
+    split_site_energy_kwh,
+    split_site_power_w,
+)
 
 _LOGGER = logging.getLogger(__name__)
+
+_EV_LIVE_MAX_AGE_SECONDS = 60.0
+_EV_LIVE_MAX_SKEW_SECONDS = 30.0
+_EV_SITE_LOCAL_SUPPLY_HEADROOM_W = 25_000.0
+
+
+def _state_unit(state: Any) -> str:
+    """Return a normalized Home Assistant unit string."""
+    attributes = getattr(state, "attributes", {})
+    return str(attributes.get("unit_of_measurement", "")).strip()
 
 
 def _month_distance(first: int, second: int) -> int:
@@ -112,6 +136,7 @@ class EnergyOptimizerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             update_interval=UPDATE_INTERVAL,
         )
         self.config = config
+        self._ev_observation = EVObservationPlanner(hass, config.ev)
         self._load_samples: dict[tuple[int, bool, int], list[float]] = defaultdict(list)
         self._other_load_samples: dict[tuple[int, bool, int], list[float]] = defaultdict(list)
         self._tv_weekday_samples: dict[tuple[int, int, int], list[float]] = defaultdict(list)
@@ -131,6 +156,7 @@ class EnergyOptimizerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._history_refresh_date: date | None = None
         self._recent_base_daily_kwh: float | None = None
         self._recent_base_days = 0
+        self._ev_history_accounting_valid = not config.ev.enabled
 
     async def _async_setup(self) -> None:
         await self._async_refresh_history()
@@ -146,6 +172,11 @@ class EnergyOptimizerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 self.config.price_history_entity,
                 self.config.tv_light_energy_entity,
                 *self.config.device_energy_entities.values(),
+                (
+                    self.config.ev.energy_entity
+                    if self.config.ev.enabled
+                    else ""
+                ),
             )
             if entity_id
         }
@@ -159,6 +190,18 @@ class EnergyOptimizerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             None,
             {"mean", "change"},
         )
+        ev_energy_state = (
+            self.hass.states.get(self.config.ev.energy_entity)
+            if self.config.ev.enabled
+            else None
+        )
+        ev_energy_unit_valid = (
+            not self.config.ev.enabled or _state_unit(ev_energy_state) == "kWh"
+        )
+        if self.config.ev.enabled and not ev_energy_unit_valid:
+            _LOGGER.warning(
+                "EV history cleaning disabled: charger energy must use kWh"
+            )
         changes = {
             entity_id: {
                 row["start"]: row.get("change") for row in result.get(entity_id, [])
@@ -180,6 +223,25 @@ class EnergyOptimizerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             }
             for key, entity_id in self.config.device_energy_entities.items()
         }
+        ev_changes = (
+            {
+                row["start"]: row.get("change")
+                for row in result.get(self.config.ev.energy_entity, [])
+            }
+            if self.config.ev.enabled and ev_energy_unit_valid
+            else {}
+        )
+        ev_first_timestamp = min(ev_changes) if ev_changes else None
+        ev_split_expected_hours = (
+            sum(
+                1
+                for timestamp in common_starts
+                if ev_first_timestamp is not None and timestamp >= ev_first_timestamp
+            )
+            if self.config.ev.enabled
+            else 0
+        )
+        ev_split_valid_hours = 0
         load_samples: dict[tuple[int, bool, int], list[float]] = defaultdict(list)
         other_load_samples: dict[tuple[int, bool, int], list[float]] = defaultdict(list)
         tv_weekday_samples: dict[tuple[int, int, int], list[float]] = defaultdict(list)
@@ -187,23 +249,72 @@ class EnergyOptimizerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         pv_samples: dict[tuple[int, bool, int], list[float]] = defaultdict(list)
         pv_by_day: dict[date, float] = defaultdict(float)
         valid_tv_hours = 0
+        valid_load_hours = 0
         for timestamp in common_starts:
-            values = [changes[entity_id][timestamp] for entity_id in self.config.energy_history_entities]
-            if any(value is None or value < 0 or value > 6 for value in values):
+            values = [
+                changes[entity_id][timestamp]
+                for entity_id in self.config.energy_history_entities
+            ]
+            if any(
+                value is None
+                or value < 0
+                or value
+                > (
+                    DEFAULT_MAX_SITE_HOURLY_ENERGY_KWH
+                    if self.config.ev.enabled and index < 2
+                    else 6
+                )
+                for index, value in enumerate(values)
+            ):
                 continue
             grid_import, exported, pv, charged, discharged = values
-            load = grid_import + pv + discharged - charged - exported
-            if not 0 <= load <= 6:
-                continue
+            site_load = grid_import + pv + discharged - charged - exported
             local = dt_util.as_local(dt_util.utc_from_timestamp(timestamp))
-            local_hour = local.replace(minute=0, second=0, microsecond=0)
+            key = (local.month, local.weekday() >= 5, local.hour)
+            # PV is independent of the optional wallbox submeter. Retain its
+            # valid history even if this EV interval cannot safely be split.
+            if self.config.ev.enabled and 0 <= pv <= 6:
+                pv_samples[key].append(pv)
+                pv_by_day[local.date()] += pv
+
+            if self.config.ev.enabled:
+                if not ev_energy_unit_valid:
+                    continue
+                ev_energy = ev_changes.get(timestamp)
+                if ev_energy is None:
+                    # Preserve the established household model before the EV
+                    # submeter's first statistic. Once that counter exists,
+                    # gaps are skipped rather than silently learning EV load.
+                    if (
+                        ev_first_timestamp is None
+                        or timestamp >= ev_first_timestamp
+                        or not 0 <= site_load <= 6
+                    ):
+                        continue
+                    load = site_load
+                else:
+                    try:
+                        load = split_site_energy_kwh(
+                            site_load,
+                            ev_energy,
+                            site_meter_includes_ev=(
+                                self.config.ev.site_meter_includes_ev
+                            ),
+                        ).house_kwh
+                        ev_split_valid_hours += 1
+                    except InvalidMeasurementError:
+                        continue
+            else:
+                load = site_load
+                if not 0 <= load <= 6:
+                    continue
+
             device_hour: dict[str, float] = {}
             for device_key, history in device_changes.items():
                 device_energy = history.get(timestamp)
                 if device_energy is not None and 0 <= device_energy <= 4:
                     device_hour[device_key] = float(device_energy)
             base_load = non_shiftable_load(load, device_hour)
-            key = (local.month, local.weekday() >= 5, local.hour)
             tv_load = tv_changes.get(timestamp)
             if tv_load is None or not 0 <= tv_load <= 2:
                 tv_load = 0.0
@@ -216,8 +327,10 @@ class EnergyOptimizerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 tv_load
             )
             load_by_local_hour[(local.date(), local.hour)] = base_load
-            pv_samples[key].append(pv)
-            pv_by_day[local.date()] += pv
+            if not self.config.ev.enabled:
+                pv_samples[key].append(pv)
+                pv_by_day[local.date()] += pv
+            valid_load_hours += 1
 
         price_samples: dict[tuple[int, bool, int], list[float]] = defaultdict(list)
         recent_price_samples: dict[tuple[bool, int], list[float]] = defaultdict(list)
@@ -251,7 +364,15 @@ class EnergyOptimizerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             if values
         }
         self._pv_by_day = pv_by_day
-        self._history_hours = len(common_starts)
+        self._history_hours = (
+            valid_load_hours if self.config.ev.enabled else len(common_starts)
+        )
+        if self.config.ev.enabled:
+            self._ev_history_accounting_valid = bool(
+                ev_energy_unit_valid
+                and ev_split_valid_hours >= 24
+                and ev_split_valid_hours / max(1, ev_split_expected_hours) >= 0.8
+            )
         self._load_model_ready = (
             self._history_hours >= 24 * 120
             and (
@@ -268,18 +389,27 @@ class EnergyOptimizerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # zero-change PV intervals without discarding real household load.
         today = dt_util.now().date()
         daily_energy: dict[str, dict[date, float]] = {}
-        for entity_id in self.config.energy_history_entities:
+        daily_energy_starts: dict[str, dict[date, set[float]]] = {}
+        for entity_index, entity_id in enumerate(self.config.energy_history_entities):
             per_day: dict[date, float] = defaultdict(float)
+            per_day_starts: dict[date, set[float]] = defaultdict(set)
             for row in result.get(entity_id, []):
                 value = row.get("change")
-                if value is None or value < 0 or value > 6:
+                component_limit = (
+                    DEFAULT_MAX_SITE_HOURLY_ENERGY_KWH
+                    if self.config.ev.enabled and entity_index < 2
+                    else 6
+                )
+                if value is None or value < 0 or value > component_limit:
                     continue
                 day = dt_util.as_local(
                     dt_util.utc_from_timestamp(row["start"])
                 ).date()
                 if day < today:
                     per_day[day] += float(value)
+                    per_day_starts[day].add(row["start"])
             daily_energy[entity_id] = per_day
+            daily_energy_starts[entity_id] = per_day_starts
 
         daily_devices: dict[str, dict[date, float]] = {}
         for device_key, entity_id in self.config.device_energy_entities.items():
@@ -295,6 +425,33 @@ class EnergyOptimizerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     per_day[day] += float(value)
             daily_devices[device_key] = per_day
 
+        daily_ev: dict[date, float] = defaultdict(float)
+        daily_ev_starts: dict[date, set[float]] = defaultdict(set)
+        ev_first_day: date | None = None
+        if self.config.ev.enabled and ev_energy_unit_valid:
+            for row in result.get(self.config.ev.energy_entity, []):
+                value = row.get("change")
+                if (
+                    value is None
+                    or value < 0
+                    or value > DEFAULT_MAX_EV_HOURLY_ENERGY_KWH
+                ):
+                    continue
+                day = dt_util.as_local(
+                    dt_util.utc_from_timestamp(row["start"])
+                ).date()
+                ev_first_day = (
+                    day if ev_first_day is None else min(ev_first_day, day)
+                )
+                if day < today:
+                    daily_ev[day] += float(value)
+                    daily_ev_starts[day].add(row["start"])
+
+        site_starts_by_day: dict[date, set[float]] = defaultdict(set)
+        for per_entity in daily_energy_starts.values():
+            for day, starts in per_entity.items():
+                site_starts_by_day[day].update(starts)
+
         complete_days = set.intersection(
             *(set(per_day) for per_day in daily_energy.values())
         )
@@ -306,6 +463,32 @@ class EnergyOptimizerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 for entity_id in self.config.energy_history_entities
             ]
             total_load = grid_import + pv + discharged - charged - exported
+            if self.config.ev.enabled:
+                if not ev_energy_unit_valid:
+                    continue
+                before_ev_history = (
+                    ev_first_day is not None and day < ev_first_day
+                )
+                if not before_ev_history:
+                    if (
+                        day not in daily_ev
+                        or not site_starts_by_day[day]
+                        or not site_starts_by_day[day].issubset(daily_ev_starts[day])
+                    ):
+                        continue
+                    try:
+                        total_load = split_site_energy_kwh(
+                            total_load,
+                            daily_ev[day],
+                            site_meter_includes_ev=(
+                                self.config.ev.site_meter_includes_ev
+                            ),
+                            maximum_site_energy_kwh=200,
+                            maximum_ev_energy_kwh=180,
+                            maximum_house_energy_kwh=30,
+                        ).house_kwh
+                    except InvalidMeasurementError:
+                        continue
             device_energy = {
                 key: per_day.get(day, 0.0)
                 for key, per_day in daily_devices.items()
@@ -584,40 +767,68 @@ class EnergyOptimizerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             moment.replace(minute=0, second=0, microsecond=0)
         )
 
-    def _live_power_state(
-        self, entity_id: str, *, allow_stale_zero: bool = False
-    ) -> float | None:
-        """Return a recent live power value, or None when it is not trustworthy."""
+    def _live_power_reading(
+        self,
+        entity_id: str,
+        *,
+        allow_stale_zero: bool = False,
+        maximum_age_seconds: float = LIVE_POWER_MAX_AGE_SECONDS,
+        maximum_power_w: float = LIVE_POWER_MAX_W,
+        required_unit: str | None = None,
+    ) -> tuple[float, float] | None:
+        """Return a validated power value together with its age in seconds."""
         state = self.hass.states.get(entity_id)
         if state is None or state.state in {"unknown", "unavailable"}:
+            return None
+        if required_unit is not None and _state_unit(state) != required_unit:
             return None
         try:
             value = float(state.state)
         except ValueError:
             return None
-        if not isfinite(value) or not 0 <= value <= LIVE_POWER_MAX_W:
+        if not isfinite(value) or not 0 <= value <= maximum_power_w:
             return None
         age = (dt_util.utcnow() - state.last_updated).total_seconds()
         if age < 0 or (
-            age > LIVE_POWER_MAX_AGE_SECONDS
+            age > maximum_age_seconds
             and not (allow_stale_zero and value == 0)
         ):
             return None
-        return value
+        return value, age
 
-    def _live_measurements(self) -> dict[str, float] | None:
+    def _live_power_state(
+        self,
+        entity_id: str,
+        *,
+        allow_stale_zero: bool = False,
+        required_unit: str | None = None,
+    ) -> float | None:
+        """Return a recent live power value, or None when it is not trustworthy."""
+        reading = self._live_power_reading(
+            entity_id,
+            allow_stale_zero=allow_stale_zero,
+            required_unit=required_unit,
+        )
+        return reading[0] if reading is not None else None
+
+    def _live_measurements(self) -> dict[str, Any] | None:
         """Read the current PV/load measurements for first-slot correction."""
         sun = self.hass.states.get("sun.sun")
         pv = self._live_power_state(
             self.config.live_pv_power_entity,
             allow_stale_zero=sun is not None and sun.state == "below_horizon",
+            required_unit="W",
         )
-        grid = self._live_power_state(self.config.live_grid_power_entity)
-        fresh_loads = [
-            self._live_power_state(entity) for entity in self.config.live_load_power_entities
+        grid = self._live_power_state(
+            self.config.live_grid_power_entity,
+            required_unit="W",
+        )
+        fresh_load_readings = [
+            self._live_power_reading(entity, required_unit="W")
+            for entity in self.config.live_load_power_entities
         ]
         if pv is None or grid is None or not any(
-            value is not None for value in fresh_loads
+            reading is not None for reading in fresh_load_readings
         ):
             return None
         # Victron phase sensors are edge-triggered: a phase that stays at 0 W
@@ -625,18 +836,90 @@ class EnergyOptimizerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # zero when another phase is fresh; stale non-zero or a completely
         # stale phase group still invalidates the live correction.
         loads = [
-            fresh
-            if fresh is not None
-            else self._live_power_state(entity, allow_stale_zero=True)
-            for entity, fresh in zip(self.config.live_load_power_entities, fresh_loads)
+            reading[0]
+            if reading is not None
+            else self._live_power_state(
+                entity,
+                allow_stale_zero=True,
+                required_unit="W",
+            )
+            for entity, reading in zip(
+                self.config.live_load_power_entities,
+                fresh_load_readings,
+            )
         ]
         if any(value is None for value in loads):
             return None
-        return {
+        site_load_w = sum(value for value in loads if value is not None)
+        live: dict[str, Any] = {
             "pv_w": pv,
-            "load_w": sum(value for value in loads if value is not None),
+            # The authoritative first-slot/control value remains the complete
+            # site load. Thus a manually started EV is never hidden merely
+            # because the optional planner is in observation mode.
+            "load_w": site_load_w,
+            "site_load_w": site_load_w,
+            "house_load_w": site_load_w,
+            "ev_load_w": 0.0 if not self.config.ev.enabled else None,
+            "ev_power_age_seconds": None,
+            "ev_accounting_valid": not self.config.ev.enabled,
             "grid_w": grid,
         }
+        if not self.config.ev.enabled:
+            return live
+
+        ev_reading = self._live_power_reading(
+            self.config.ev.live_power_entity,
+            maximum_age_seconds=_EV_LIVE_MAX_AGE_SECONDS,
+            maximum_power_w=DEFAULT_MAX_EV_POWER_W,
+            required_unit="W",
+        )
+        fresh_site_ages = [
+            reading[1]
+            for reading in fresh_load_readings
+            if reading is not None and reading[0] > 0
+        ]
+        if not fresh_site_ages:
+            fresh_site_ages = [
+                reading[1]
+                for reading in fresh_load_readings
+                if reading is not None
+            ]
+        if ev_reading is None or not fresh_site_ages:
+            return live
+        live["ev_load_w"] = ev_reading[0]
+        live["ev_power_age_seconds"] = round(ev_reading[1], 1)
+        try:
+            split: SitePowerBreakdown = split_site_power_w(
+                site_load_w,
+                ev_reading[0],
+                site_meter_includes_ev=self.config.ev.site_meter_includes_ev,
+                # The aggregate is only as fresh as its oldest contributing
+                # non-zero/fresh phase reading.
+                site_age_seconds=max(fresh_site_ages),
+                ev_age_seconds=ev_reading[1],
+                maximum_age_seconds=_EV_LIVE_MAX_AGE_SECONDS,
+                maximum_skew_seconds=_EV_LIVE_MAX_SKEW_SECONDS,
+                # The import setting is not a whole-site load limit: local PV
+                # and the stationary battery may supply additional power.
+                # Keep explicit local-supply headroom, still capped by the
+                # pure accounting helper's conservative absolute ceiling.
+                maximum_site_power_w=min(
+                    DEFAULT_MAX_SITE_POWER_W,
+                    self.config.ev.site_max_import_power_kw * 1000
+                    + _EV_SITE_LOCAL_SUPPLY_HEADROOM_W,
+                ),
+                maximum_ev_power_w=DEFAULT_MAX_EV_POWER_W,
+            )
+        except InvalidMeasurementError:
+            return live
+        live.update(
+            {
+                "house_load_w": split.house_w,
+                "ev_load_w": split.ev_w,
+                "ev_accounting_valid": True,
+            }
+        )
+        return live
 
     def _build_slots(
         self, now: datetime
@@ -985,6 +1268,23 @@ class EnergyOptimizerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 slots,
                 initial_planned_power_kw=running_power_kw,
             )
+            try:
+                ev_plan = await self._ev_observation.async_plan(
+                    now,
+                    slots,
+                    live,
+                    self._ev_history_accounting_valid,
+                )
+            except Exception:  # noqa: BLE001 - isolate optional EV support
+                _LOGGER.exception("Unexpected EV planning failure")
+                ev_plan = disabled_ev_plan_payload()
+                ev_plan.update(
+                    {
+                        "status": "awaiting_data",
+                        "reason": "ev_planning_failed",
+                        "suggested_mode": "degraded",
+                    }
+                )
             measured_soc = self._optional_numeric_state(self.config.soc_entity)
             soc_is_valid = measured_soc is not None and 0 <= measured_soc <= 100
             # Keep the diagnostic forecast available when the BMS emits its
@@ -1044,7 +1344,10 @@ class EnergyOptimizerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             ),
             None,
         )
-        quiet_hours_now = now.hour >= self.config.quiet_hours_start or now.hour < self.config.quiet_hours_end
+        quiet_hours_now = (
+            now.hour >= self.config.quiet_hours_start
+            or now.hour < self.config.quiet_hours_end
+        )
         target_charge_current = (
             self.config.quiet_charge_current_a
             if result.action == "GRID_CHARGE" and quiet_hours_now
@@ -1185,9 +1488,23 @@ class EnergyOptimizerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "winter_grid_charge_enabled": True,
             "scheduled_jobs": schedules,
             "running_jobs": running_jobs,
+            "ev_plan": ev_plan,
             "calculated_at": now.isoformat(),
             "live_correction_active": live is not None,
             "live_pv_w": round(live["pv_w"], 1) if live is not None else None,
             "live_load_w": round(live["load_w"], 1) if live is not None else None,
             "live_grid_w": round(live["grid_w"], 1) if live is not None else None,
+            "live_site_load_w": (
+                round(live["site_load_w"], 1) if live is not None else None
+            ),
+            "live_house_load_w": (
+                round(live["house_load_w"], 1)
+                if live is not None and live.get("ev_accounting_valid") is True
+                else None
+            ),
+            "live_ev_load_w": (
+                round(live["ev_load_w"], 1)
+                if live is not None and live.get("ev_load_w") is not None
+                else None
+            ),
         }

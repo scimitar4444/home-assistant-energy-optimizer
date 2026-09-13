@@ -48,6 +48,23 @@ CONF_VICTRON_MAX_CHARGE_CURRENT_REGISTER = "victron_max_charge_current_register"
 CONF_VICTRON_GRID_SETPOINT_REGISTER = "victron_grid_setpoint_register"
 CONF_VICTRON_GRID_SETPOINT_MAX_W = "victron_grid_setpoint_max_w"
 
+# Optional, vendor-neutral EV planning.  These remain flat config-entry keys so
+# existing entries can opt in without a migration of their established data.
+CONF_EV_ENABLED = "ev_enabled"
+CONF_SITE_METER_INCLUDES_EV = "site_meter_includes_ev"
+CONF_EV_LIVE_POWER_ENTITY = "ev_live_power_entity"
+CONF_EV_ENERGY_ENTITY = "ev_energy_entity"
+CONF_EV_CONNECTED_ENTITY = "ev_connected_entity"
+CONF_EV_VEHICLE_SOC_ENTITY = "ev_vehicle_soc_entity"
+CONF_EV_CALENDAR_ENTITY = "ev_calendar_entity"
+CONF_EV_NORMAL_CHARGE_POWER_KW = "ev_normal_charge_power_kw"
+CONF_EV_BOOST_CHARGE_POWER_KW = "ev_boost_charge_power_kw"
+CONF_EV_BATTERY_CAPACITY_KWH = "ev_battery_capacity_kwh"
+CONF_EV_CONSUMPTION_KWH_PER_100KM = "ev_consumption_kwh_per_100km"
+CONF_EV_RESERVE_KM = "ev_reserve_km"
+CONF_EV_CHARGE_EFFICIENCY = "ev_charge_efficiency"
+CONF_SITE_MAX_IMPORT_POWER_KW = "site_max_import_power_kw"
+
 DEFAULT_BATTERY_CAPACITY_KWH = 5.0
 DEFAULT_HARD_MIN_SOC = 12.0
 DEFAULT_MAX_CONTROL_SOC = 95.0
@@ -69,6 +86,18 @@ DEFAULT_VICTRON_SETTINGS_UNIT_ID = 100
 DEFAULT_VICTRON_MAX_CHARGE_CURRENT_REGISTER = 2705
 DEFAULT_VICTRON_GRID_SETPOINT_REGISTER = 2716
 DEFAULT_VICTRON_GRID_SETPOINT_MAX_W = 3000
+
+DEFAULT_EV_ENABLED = False
+DEFAULT_SITE_METER_INCLUDES_EV = False
+DEFAULT_EV_NORMAL_CHARGE_POWER_KW = 3.6
+MAX_EV_AUTOMATIC_CHARGE_POWER_KW = 11.0
+DEFAULT_EV_BOOST_CHARGE_POWER_KW = MAX_EV_AUTOMATIC_CHARGE_POWER_KW
+DEFAULT_EV_BATTERY_CAPACITY_KWH = 60.0
+DEFAULT_EV_CONSUMPTION_KWH_PER_100KM = 18.0
+DEFAULT_EV_RESERVE_KM = 50.0
+DEFAULT_EV_CHARGE_EFFICIENCY = 0.90
+DEFAULT_SITE_MAX_IMPORT_POWER_KW = 22.0
+MAX_SITE_IMPORT_POWER_KW = 60.0
 
 # Backwards-compatible names used by the pure, deterministic control helpers.
 BATTERY_CAPACITY_KWH = DEFAULT_BATTERY_CAPACITY_KWH

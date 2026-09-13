@@ -7,7 +7,6 @@ from datetime import datetime, timedelta
 
 from .optimizer import ForecastSlot
 
-
 SLOT_DURATION = timedelta(minutes=15)
 
 

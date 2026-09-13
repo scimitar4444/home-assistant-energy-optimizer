@@ -18,6 +18,7 @@ It does **not** use an LLM, cloud AI or online inference. All calculations run l
 - includes configurable battery capacity, minimum SoC, efficiency, charge power and optional battery wear;
 - learns a robust non-shiftable load profile from Home Assistant long-term statistics;
 - uses remaining-today and tomorrow PV forecasts, with historical seasonal fallback;
+- optionally plans vendor-neutral EV charging against calendar deadlines;
 - exposes localized English and German sensors and diagnostics;
 - optionally exposes verified Victron Modbus TCP write services for advanced users.
 
@@ -51,13 +52,14 @@ Copy `custom_components/energy_optimizer` into your Home Assistant `config/custo
 
 ## Configuration
 
-The UI guides you through five groups:
+The UI guides you through five required groups and one optional EV step:
 
 1. battery and tariff policy;
 2. prices, SoC and PV forecasts;
 3. live power sensors;
 4. long-term energy counters;
-5. optional weather and advanced Victron settings.
+5. optional weather and advanced Victron settings;
+6. optional, observation-only EV planning.
 
 Start with grid charging disabled and leave both the control helper and Victron host empty. Observe at least several days, compare forecast and measured grid import, then decide whether to add an automation that consumes the short-lived command attributes.
 
@@ -77,6 +79,29 @@ The main status sensor uses these stable states:
 The optimizer deliberately separates planning from actuation. Recommendations expire at the next quarter-hour boundary and estimated future prices may influence the trend, but cannot on their own authorize grid charging or PV diversion. See [Architecture](docs/ARCHITECTURE.md) and the example dashboards in [`examples/`](examples/).
 
 Victron services are advanced building blocks, not an automatic installer. Register defaults match one tested GX setup but may differ on yours. A positive grid setpoint is never emitted for an unknown current price, and `0 W` releases it.
+
+## Optional EV planning
+
+The EV module is disabled by default and is observation-only in this beta. It
+uses vehicle SoC and a calendar departure to calculate a charging
+recommendation, but it does not control a charger. An unexecuted EV schedule
+therefore cannot change the battery command. Actual measured EV demand remains
+part of the live whole-site load.
+
+The metering topology must be correct: the selected gross whole-site load
+sensors must include **both household and charger consumption**; they are not
+raw grid-import sensors. Historical site energy is reconstructed from the five
+flow counters before a separate charger submeter removes EV energy from the
+learned household base load.
+
+Use a dedicated EV departure calendar. Every timed event with
+`distance_km: 80` in its description is a trip; an optional `reserve_km: 40`
+overrides the configured reserve. All-day events are ignored. The nearest trip
+enters planning inside the 48-hour horizon. The recommendation defaults to
+3.6 kW and may suggest no more than 11 kW automatically when normal power
+cannot meet the deadline. A 22 kW emergency charge remains outside the beta.
+The required sensor units and calendar format are documented in [Optional EV
+planning](docs/EV_PLANNING.md).
 
 ## Development
 

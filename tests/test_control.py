@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-from datetime import datetime
 import importlib.util
-from pathlib import Path
 import sys
 import types
 import unittest
-
+from datetime import datetime
+from pathlib import Path
 
 _PACKAGE = "energy_optimizer"
 _ROOT = Path(__file__).parents[1] / "custom_components" / _PACKAGE

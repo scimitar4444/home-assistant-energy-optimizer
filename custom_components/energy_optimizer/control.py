@@ -17,7 +17,6 @@ from .const import (
     VICTRON_RELEASE_HEADROOM_PERCENT,
 )
 
-
 VALID_ACTIONS = {
     "DISCHARGE",
     "RESERVE",
