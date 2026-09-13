@@ -66,7 +66,11 @@ Die Zustände bedeuten:
 | `GRID_CHARGE` | günstigen bekannten Netzstrom für ein teures bekanntes Intervall laden |
 | `DEGRADED` | eine aktionsbezogene Eingabe fehlt oder ist ungültig; sicherer Ersatzbefehl |
 
-Planung und Schalten sind absichtlich getrennt. Befehle enden spätestens an der nächsten Viertelstundengrenze. Geschätzte Folgepreise dürfen eine Tendenz zeigen, aber niemals allein Netzladen oder PV‑Umlenkung freigeben. Die prozentuale Datenabdeckung ist nur eine Diagnose; für die Befehlsfreigabe zählen stattdessen der aktuelle SoC, die Live‑Messwerte und die bestätigten Preise, die die jeweilige Aktion tatsächlich benötigt. Details stehen in der [Architektur](docs/ARCHITECTURE.de.md); Beispielkarten liegen unter [`examples/`](examples/).
+Planung und Schalten sind absichtlich getrennt. Normale Befehle enden spätestens an der nächsten Viertelstundengrenze; ein aktiver, gemessener Netzladeblock erhält stattdessen eine kurze rollende Gültigkeit, die nie über sein festes Ende hinausgeht. Geschätzte Folgepreise dürfen eine Tendenz zeigen, aber niemals allein Netzladen oder PV‑Umlenkung freigeben. Die prozentuale Datenabdeckung ist nur eine Diagnose; für die Befehlsfreigabe zählen stattdessen der aktuelle SoC, die Live‑Messwerte und die bestätigten Preise, die die jeweilige Aktion tatsächlich benötigt. Details stehen in der [Architektur](docs/ARCHITECTURE.de.md); Beispielkarten liegen unter [`examples/`](examples/).
+
+Netzladen läuft als ein gemessener Block aus zusammenhängenden, bestätigten Viertelstunden. Nach dem Start können Prognoseänderungen ihn weder vergrößern noch unterbrechen. Der kumulative Batterieladezähler beendet ihn, sobald die geplante gespeicherte Energie angekommen ist; bis zum ursprünglichen Blockende bleibt der Auftrag gesperrt, damit ein träger SoC dieselbe Energie nicht doppelt bestellt. Herstellerspezifische BMS-Sperren muss der nachgeschaltete Hardware-Adapter zusätzlich durchsetzen.
+
+Das Standardprofil für leises Netzladen begrenzt die geplante Batterieladung auf **0,8 kW** und den Ladestrombefehl des Aktors auf **15 A**: Montag bis Freitag von 23:00 bis 06:30 Uhr, am Samstag- und Sonntagmorgen bis 09:30 Uhr. Einmalige Kalenderausnahmen sind vorgesehen, werden derzeit aber noch nicht ausgewertet.
 
 ## Optionale Fahrzeugplanung
 

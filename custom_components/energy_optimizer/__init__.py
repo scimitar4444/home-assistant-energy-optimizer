@@ -251,6 +251,34 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     )
 
     @callback
+    def _refresh_when_grid_charge_target_is_reached(event: Event) -> None:
+        """Refresh only when the cumulative charge counter reaches the block target."""
+        data = coordinator.data or {}
+        if data.get("grid_charge_session_state") != "ACTIVE":
+            return
+        new_state = event.data.get("new_state")
+        if new_state is None or new_state.state in {"unknown", "unavailable"}:
+            entry.async_create_task(hass, coordinator.async_request_refresh())
+            return
+        try:
+            counter = float(new_state.state)
+            baseline = float(data["grid_charge_session_baseline_kwh"])
+            target = float(data["grid_charge_session_target_kwh"])
+        except (KeyError, TypeError, ValueError):
+            entry.async_create_task(hass, coordinator.async_request_refresh())
+            return
+        if counter + 0.005 >= baseline + target:
+            entry.async_create_task(hass, coordinator.async_request_refresh())
+
+    entry.async_on_unload(
+        async_track_state_change_event(
+            hass,
+            [config.energy_history_entities[3]],
+            _refresh_when_grid_charge_target_is_reached,
+        )
+    )
+
+    @callback
     def _refresh_at_quarter_hour(now) -> None:
         calculated_at = dt_util.parse_datetime(
             str((coordinator.data or {}).get("calculated_at", ""))

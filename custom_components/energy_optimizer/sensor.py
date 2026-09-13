@@ -399,6 +399,24 @@ class OptimizerSensor(CoordinatorEntity[EnergyOptimizerCoordinator], SensorEntit
             "steuerbefehl_grund": command["reason"],
             "naechste_entladung": data["next_discharge"],
             "naechste_netzladung": data.get("next_grid_charge"),
+            "grid_charge_block_state": data.get(
+                "grid_charge_session_state", "IDLE"
+            ),
+            "grid_charge_block_start": data.get("grid_charge_session_start"),
+            "grid_charge_block_end": data.get("grid_charge_session_end"),
+            "grid_charge_block_counter_baseline_kwh": data.get(
+                "grid_charge_session_baseline_kwh"
+            ),
+            "grid_charge_block_target_kwh": data.get(
+                "grid_charge_session_target_kwh"
+            ),
+            "grid_charge_block_delivered_kwh": data.get(
+                "grid_charge_session_delivered_kwh"
+            ),
+            "grid_charge_block_stop_reason": data.get(
+                "grid_charge_session_stop_reason", ""
+            ),
+            "battery_charge_counter_kwh": data.get("battery_charge_counter_kwh"),
             "bekannte_preisintervalle": data["known_price_slots"],
             "geschaetzte_preisintervalle": data["estimated_price_slots"],
             "historienstunden": data["history_hours"],

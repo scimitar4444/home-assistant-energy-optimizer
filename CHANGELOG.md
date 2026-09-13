@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.1.0-beta.6 - 2026-09-13
+
+- Grid charging now starts only at a quarter-hour boundary and remains one
+  frozen, contiguous block instead of following every rolling forecast update.
+- The cumulative battery-charge counter ends a block after its planned stored
+  energy has arrived; a stale SoC can no longer repeat the same charge order.
+- A full battery, invalid measurements, a reset/stalled counter, disabled
+  control or the frozen block end all fail safe to a zero grid setpoint.
+- Scale the first, partial quarter-hour's grid-charge allowance to its actual
+  remaining duration so the plan cannot exceed the actuator limit.
+
 ## 0.1.0-beta.5 - 2026-09-13
 
 - Ongoing charge and discharge blocks are no longer reported as upcoming

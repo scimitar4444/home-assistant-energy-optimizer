@@ -76,7 +76,11 @@ The main status sensor uses these stable states:
 
 ## Design and safety
 
-The optimizer deliberately separates planning from actuation. Recommendations expire at the next quarter-hour boundary and estimated future prices may influence the trend, but cannot on their own authorize grid charging or PV diversion. The data-coverage percentage is diagnostic; command authorization uses the current SoC, live measurements and confirmed prices required by each action. See [Architecture](docs/ARCHITECTURE.md) and the example dashboards in [`examples/`](examples/).
+The optimizer deliberately separates planning from actuation. Ordinary recommendations expire at the next quarter-hour boundary; an active metered grid-charge block instead uses a rolling short expiry that never exceeds its frozen end. Estimated future prices may influence the trend, but cannot on their own authorize grid charging or PV diversion. The data-coverage percentage is diagnostic; command authorization uses the current SoC, live measurements and confirmed prices required by each action. See [Architecture](docs/ARCHITECTURE.md) and the example dashboards in [`examples/`](examples/).
+
+Grid charging runs as one metered block made from contiguous, confirmed quarter-hours. Once started, forecast changes cannot resize or interrupt it. The cumulative battery-charge counter stops it when the planned stored energy has arrived; until the original block end the order remains locked so a delayed SoC cannot buy the same energy twice. A downstream hardware adapter must additionally enforce any vendor-specific BMS interlocks.
+
+The default quiet grid-charge profile limits planned battery charging to **0.8 kW** and the actuator's charge-current command to **15 A** from 23:00 until 06:30 on weekdays and until 09:30 on Saturday and Sunday mornings. Calendar-based one-off exceptions are planned but are not interpreted yet.
 
 Victron services are advanced building blocks, not an automatic installer. Register defaults match one tested GX setup but may differ on yours. A positive grid setpoint is never emitted for an unknown current price, and `0 W` releases it.
 

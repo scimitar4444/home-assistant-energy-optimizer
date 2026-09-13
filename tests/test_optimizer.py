@@ -58,11 +58,11 @@ class WinterGridChargeTests(unittest.TestCase):
         )
 
     def test_cheap_permitted_slot_charges_for_expensive_hours(self) -> None:
-        result = self._result(0.20, 1.6)
+        result = self._result(0.20, 0.8)
         self.assertEqual(result.action, "GRID_CHARGE")
         self.assertGreater(result.target_min_soc, 20)
         self.assertGreater(result.expected_grid_charge_kwh, 0)
-        self.assertLessEqual(result.plan[0]["grid_to_battery_kwh"], 0.4)
+        self.assertLessEqual(result.plan[0]["grid_to_battery_kwh"], 0.2)
 
     def test_missing_permission_prevents_grid_charge(self) -> None:
         result = self._result(0.20, 0.0)

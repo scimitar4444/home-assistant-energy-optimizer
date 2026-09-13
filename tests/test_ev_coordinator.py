@@ -135,6 +135,28 @@ class QuietChargeWindowTests(unittest.TestCase):
                 self.assertFalse(self._is_quiet(day.replace(hour=9, minute=30)))
 
 
+class GridChargeSlotLimitTests(unittest.TestCase):
+    def test_first_slot_is_scaled_to_remaining_time(self) -> None:
+        self.assertAlmostEqual(
+            _MODULE._grid_charge_slot_limit_kw(
+                0.8,
+                slot_index=0,
+                first_slot_fraction=0.2,
+            ),
+            0.16,
+        )
+
+    def test_later_slot_keeps_full_power_limit(self) -> None:
+        self.assertEqual(
+            _MODULE._grid_charge_slot_limit_kw(
+                0.8,
+                slot_index=1,
+                first_slot_fraction=0.2,
+            ),
+            0.8,
+        )
+
+
 class FirmPriceBasisTests(unittest.TestCase):
     @staticmethod
     def _slot(price: float, *, forecast: bool = False):

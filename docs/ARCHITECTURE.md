@@ -31,6 +31,22 @@ charger command is emitted.
 
 Tariff providers commonly publish only a finite known horizon. The integration may fill the rest of its 48-hour display with seven-day historical averages, but active storage actions are constrained at the boundary to the state of a passive reference plan. Therefore additional energy cannot be bought or diverted merely to carry it into an estimated-price period. Intraday discharge → cheap recharge → later discharge remains possible when all relevant prices are known.
 
+## Metered grid-charge blocks
+
+Grid charging runs as one small state machine instead of a sequence of
+independent replanning decisions. A block can start only for a slot aligned to
+an exact quarter-hour boundary. At that point the integration freezes the
+contiguous confirmed-price charging slots, the cumulative DC battery-charge
+counter baseline, and a DC energy target derived from the planned AC charging
+energy multiplied by the configured charging efficiency. Later load or PV
+forecast changes do not alter an active block.
+
+The block stops when the measured target energy is reached, its frozen end is
+reached, SoC reaches 100%, or control is disabled. An invalid, reset or stalled
+cumulative charge counter aborts the block fail-safe. Vendor-specific BMS
+charge-current signals are deliberately outside the generic integration and
+must be enforced by the downstream actuator when available.
+
 ## Failure model
 
 - invalid SoC values, including the common `65535` sentinel, are rejected;
@@ -43,5 +59,7 @@ Tariff providers commonly publish only a finite known horizon. The integration m
 - reserve requires that same confirmed price basis, except that retaining
   energy at a non-positive current price is valid on its own;
 - positive grid setpoints require a firm current price and bounded live measurements;
-- every command expires no later than the current quarter-hour boundary;
+- ordinary commands expire no later than the current quarter-hour boundary;
+- while a grid-charge block is active, its command is refreshed with a rolling
+  validity of at most seven minutes and never beyond the frozen block end;
 - planning and writing are separate, so installing the integration alone cannot switch the inverter.

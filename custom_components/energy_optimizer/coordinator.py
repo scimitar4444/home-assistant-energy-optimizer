@@ -25,6 +25,7 @@ from .appliance_planning import (
 )
 from .config import OptimizerConfig
 from .const import (
+    DEFAULT_BATTERY_CHARGE_EFFICIENCY,
     LIVE_GRID_WARNING_W,
     LIVE_POWER_MAX_AGE_SECONDS,
     LIVE_POWER_MAX_W,
@@ -36,6 +37,12 @@ from .control import bounded_pv_store_grid_setpoint_w, build_control_command
 from .ev_observation import (
     EVObservationPlanner,
     disabled_ev_plan_payload,
+)
+from .grid_charge_session import (
+    GridChargeSession,
+    build_grid_charge_session,
+    evaluate_grid_charge_session,
+    terminal_session_may_clear,
 )
 from .load_model import (
     WeatherSample,
@@ -91,6 +98,17 @@ def _is_quiet_charge_time(
     if start_hour < end_hour:
         return start_hour <= current_hour < end_hour
     return current_hour >= start_hour or current_hour < end_hour
+
+
+def _grid_charge_slot_limit_kw(
+    maximum_power_kw: float,
+    *,
+    slot_index: int,
+    first_slot_fraction: float,
+) -> float:
+    """Scale the synthetic first quarter-hour to its real remaining duration."""
+    fraction = first_slot_fraction if slot_index == 0 else 1.0
+    return max(0.0, maximum_power_kw) * max(0.0, min(1.0, fraction))
 
 
 def _next_flow_block_start(
@@ -235,6 +253,7 @@ class EnergyOptimizerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._recent_base_daily_kwh: float | None = None
         self._recent_base_days = 0
         self._ev_history_accounting_valid = not config.ev.enabled
+        self._grid_charge_session: GridChargeSession | None = None
 
     async def _async_setup(self) -> None:
         await self._async_refresh_history()
@@ -704,6 +723,20 @@ class EnergyOptimizerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         except ValueError:
             return None
         return value if isfinite(value) else None
+
+    def _battery_charge_counter(self) -> float | None:
+        """Return the configured cumulative DC charge counter in kWh."""
+        entity_id = self.config.energy_history_entities[3]
+        state = self.hass.states.get(entity_id)
+        if state is None or state.state in {"unknown", "unavailable"}:
+            return None
+        if _state_unit(state) != "kWh":
+            return None
+        try:
+            value = float(state.state)
+        except ValueError:
+            return None
+        return value if isfinite(value) and value >= 0 else None
 
     @staticmethod
     def _merge_weather(
@@ -1186,6 +1219,11 @@ class EnergyOptimizerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             max_grid_charge_kw = (
                 self.config.quiet_grid_charge_kw if quiet_hours else self.config.day_grid_charge_kw
             ) if dynamic_grid_charge else 0.0
+            max_grid_charge_kw = _grid_charge_slot_limit_kw(
+                max_grid_charge_kw,
+                slot_index=index,
+                first_slot_fraction=first_slot_fraction,
+            )
             slots.append(
                 ForecastSlot(
                     slot_time.isoformat(),
@@ -1422,11 +1460,6 @@ class EnergyOptimizerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             weekday_end_hour=self.config.quiet_hours_end,
             weekend_end_hour=self.config.quiet_hours_weekend_end,
         )
-        target_charge_current = (
-            self.config.quiet_charge_current_a
-            if result.action == "GRID_CHARGE" and quiet_hours_now
-            else self.config.normal_charge_current_a
-        )
         (
             requested_grid_setpoint_w,
             planned_grid_to_house_w,
@@ -1438,30 +1471,130 @@ class EnergyOptimizerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             live=live,
             maximum_grid_setpoint_w=self.config.victron_grid_setpoint_max_w,
         )
-        current_price_is_known = not slots[0].price_is_forecast
-        action_has_firm_price_basis = _action_has_firm_price_basis(
-            result.action,
+        charge_counter = self._battery_charge_counter()
+        control_enabled = bool(self.config.control_enable_entity) and (
+            self.hass.states.is_state(self.config.control_enable_entity, "on")
+        )
+        proposed_grid_charge_now = (
+            control_enabled
+            and result.action == "GRID_CHARGE"
+            and requested_grid_setpoint_w > 0
+        )
+        if self._grid_charge_session is not None:
+            self._grid_charge_session = evaluate_grid_charge_session(
+                self._grid_charge_session,
+                now=now,
+                charge_counter_kwh=charge_counter,
+                battery_soc=measured_soc,
+                control_enabled=control_enabled,
+            )
+            if terminal_session_may_clear(
+                self._grid_charge_session,
+                proposed_grid_charge_now=proposed_grid_charge_now,
+                now=now,
+            ):
+                self._grid_charge_session = None
+        if self._grid_charge_session is None and proposed_grid_charge_now:
+            candidate = build_grid_charge_session(
+                now=now,
+                plan=result.plan,
+                baseline_charge_counter_kwh=(
+                    charge_counter if charge_counter is not None else float("nan")
+                ),
+                first_grid_setpoint_w=requested_grid_setpoint_w,
+                target_minimum_soc=result.target_min_soc,
+                reason=reason,
+                charge_efficiency=DEFAULT_BATTERY_CHARGE_EFFICIENCY,
+                maximum_grid_setpoint_w=self.config.victron_grid_setpoint_max_w,
+            )
+            if candidate is not None:
+                self._grid_charge_session = evaluate_grid_charge_session(
+                    candidate,
+                    now=now,
+                    charge_counter_kwh=charge_counter,
+                    battery_soc=measured_soc,
+                    control_enabled=control_enabled,
+                )
+
+        session = self._grid_charge_session
+        effective_action = result.action
+        effective_target_soc = result.target_min_soc
+        effective_reason = reason
+        if session is not None and session.active:
+            frozen_slice = session.slice_at(now)
+            if frozen_slice is None:
+                session = evaluate_grid_charge_session(
+                    session,
+                    now=now,
+                    charge_counter_kwh=charge_counter,
+                    battery_soc=measured_soc,
+                    control_enabled=control_enabled,
+                )
+                self._grid_charge_session = session
+            else:
+                effective_action = "GRID_CHARGE"
+                effective_target_soc = session.target_minimum_soc
+                effective_reason = session.reason
+                requested_grid_setpoint_w = frozen_slice.grid_setpoint_w
+                planned_grid_charge_w = round(
+                    frozen_slice.grid_to_battery_ac_kwh * 1000 / 0.25
+                )
+        if result.action == "GRID_CHARGE" and not (
+            session is not None and session.active
+        ):
+            effective_action = "RESERVE"
+            requested_grid_setpoint_w = 0
+            effective_reason = (
+                "Grid-charge block finished"
+                if session is not None
+                else "Grid charge waits for the next quarter-hour boundary"
+            )
+            current_slot_end = _quarter(now) + timedelta(minutes=15)
+            if (
+                session is None
+                and len(result.plan) > 1
+                and float(result.plan[1]["grid_to_battery_kwh"]) > 0.005
+                and not bool(result.plan[1]["price_is_forecast"])
+            ):
+                next_grid_charge = current_slot_end.isoformat()
+        target_charge_current = (
+            self.config.quiet_charge_current_a
+            if effective_action == "GRID_CHARGE" and quiet_hours_now
+            else self.config.normal_charge_current_a
+        )
+        session_active = session is not None and session.active
+        current_price_is_known = session_active or not slots[0].price_is_forecast
+        action_has_firm_price_basis = session_active or _action_has_firm_price_basis(
+            effective_action,
             slots,
             result.plan,
         )
         command = build_control_command(
             now=now,
-            action=result.action,
-            model_minimum_soc=result.target_min_soc,
+            action=effective_action,
+            model_minimum_soc=effective_target_soc,
             current_soc=(measured_soc if measured_soc is not None else float("nan")),
             data_quality_percent=confidence,
             requested_charge_current_a=target_charge_current,
             requested_grid_setpoint_w=requested_grid_setpoint_w,
             current_price_is_known=current_price_is_known,
-            reason=reason,
-            live_power_is_valid=live is not None,
+            reason=effective_reason,
+            live_power_is_valid=session_active or live is not None,
             action_has_firm_price_basis=action_has_firm_price_basis,
             hard_min_soc=self.config.hard_min_soc,
             normal_charge_current_a=self.config.normal_charge_current_a,
             maximum_grid_setpoint_w=self.config.victron_grid_setpoint_max_w,
         )
+        if session_active:
+            command = replace(
+                command,
+                valid_until=min(
+                    now + timedelta(minutes=7),
+                    session.end,
+                ).isoformat(timespec="seconds"),
+            )
         pv_headroom_active = (
-            result.action == "PV_SURPLUS"
+            effective_action == "PV_SURPLUS"
             and command.action == "PV_SURPLUS"
             and command.minimum_soc < result.target_min_soc
         )
@@ -1556,6 +1689,34 @@ class EnergyOptimizerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "pv_headroom_required_percent": result.pv_headroom_required_percent,
             "next_discharge": next_discharge,
             "next_grid_charge": next_grid_charge,
+            "grid_charge_session_state": (
+                session.state if session is not None else "IDLE"
+            ),
+            "grid_charge_session_start": (
+                session.start.isoformat() if session is not None else None
+            ),
+            "grid_charge_session_end": (
+                session.end.isoformat() if session is not None else None
+            ),
+            "grid_charge_session_baseline_kwh": (
+                round(session.baseline_charge_counter_kwh, 3)
+                if session is not None
+                else None
+            ),
+            "grid_charge_session_target_kwh": (
+                round(session.target_stored_kwh, 3)
+                if session is not None
+                else None
+            ),
+            "grid_charge_session_delivered_kwh": (
+                round(session.delivered_stored_kwh, 3)
+                if session is not None
+                else None
+            ),
+            "grid_charge_session_stop_reason": (
+                session.stop_reason if session is not None else ""
+            ),
+            "battery_charge_counter_kwh": charge_counter,
             "target_charge_current": command.charge_current_a,
             "target_grid_setpoint_w": command.grid_setpoint_w,
             "planned_grid_to_house_first_slot_w": planned_grid_to_house_w,
