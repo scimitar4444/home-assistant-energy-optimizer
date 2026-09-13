@@ -18,6 +18,7 @@ Er verwendet **kein LLM, keine Cloud‑KI und keine Online‑Modellberechnung**.
 - einstellbare Batteriekapazität, harte Entladegrenze, Wirkungsgrade, Ladeleistung und optionaler Batterieverschleiß;
 - robuste Grundlastprognose aus Home‑Assistant‑Langzeitstatistiken;
 - PV‑Restprognose für heute und morgen, ersatzweise saisonale Historie;
+- optionale, herstellerneutrale Fahrzeugplanung mit Kalenderfrist;
 - deutsche und englische Sensorbezeichnungen;
 - optionale, rückgelesene Victron‑Modbus‑TCP‑Dienste für erfahrene Nutzer.
 
@@ -47,7 +48,12 @@ Alternativ den Ordner `custom_components/energy_optimizer` nach `config/custom_c
 
 ## Sicherer Einstieg
 
-Die Einrichtung führt durch Batterie/Tarif, Preise/Prognosen, Live‑Leistung, Langzeit‑Energiezähler und optionale Daten. Lasse zunächst Netzladen deaktiviert sowie Steuerungshelfer und Victron‑Host leer. Beobachte einige Tage die Prognose und den tatsächlichen Netzbezug. Erst danach sollte eine eigene Automation die kurzlebigen Steuerbefehle übernehmen.
+Die Einrichtung führt durch fünf Grundschritte für Batterie/Tarif,
+Preise/Prognosen, Live‑Leistung, Langzeit‑Energiezähler und optionale Daten.
+Danach folgt die optionale, rein beobachtende Fahrzeugplanung. Lasse zunächst
+Netzladen deaktiviert sowie Steuerungshelfer und Victron‑Host leer. Beobachte
+einige Tage die Prognose und den tatsächlichen Netzbezug. Erst danach sollte
+eine eigene Automation die kurzlebigen Steuerbefehle übernehmen.
 
 Die Zustände bedeuten:
 
@@ -61,6 +67,29 @@ Die Zustände bedeuten:
 | `DEGRADED` | Datenqualität reicht nicht; sicherer Ersatzbefehl |
 
 Planung und Schalten sind absichtlich getrennt. Befehle enden spätestens an der nächsten Viertelstundengrenze. Geschätzte Folgepreise dürfen eine Tendenz zeigen, aber niemals allein Netzladen oder PV‑Umlenkung freigeben. Details stehen in der [Architektur](docs/ARCHITECTURE.md); Beispielkarten liegen unter [`examples/`](examples/).
+
+## Optionale Fahrzeugplanung
+
+Das Fahrzeugmodul ist standardmäßig ausgeschaltet und arbeitet in dieser Beta
+nur beobachtend. Es berechnet aus Fahrzeug‑SoC und Kalendertermin eine
+Ladeempfehlung, schaltet aber keine Wallbox. Eine noch nicht ausgeführte
+Fahrzeugplanung verändert daher auch keinen Batteriebefehl. Der tatsächlich
+gemessene Fahrzeugverbrauch bleibt Teil der Live‑Standortlast.
+
+Voraussetzung ist das richtige Messkonzept: Die gewählten Sensoren für die
+Brutto‑Standortlast müssen **Haus und Wallbox gemeinsam** enthalten; es sind
+keine reinen Netzbezugs‑Sensoren. Die Standortenergie wird zunächst aus den
+fünf Flusszählern rekonstruiert. Erst danach zieht ein eigener
+Wallbox‑Unterzähler die Fahrzeugenergie aus der gelernten Haushaltsgrundlast ab.
+
+Verwende dafür einen eigenen EV‑Abfahrtskalender. Ein Termin mit Uhrzeit und
+`distance_km: 80` in der Beschreibung gilt als Fahrt; optional überschreibt
+`reserve_km: 40` die konfigurierte Reserve. Ganztagstermine werden ignoriert.
+Die nächste Fahrt geht innerhalb des 48‑Stunden‑Horizonts in die Planung ein.
+Die Empfehlung nutzt standardmäßig 3,6 kW und darf automatisch höchstens 11 kW
+vorschlagen, wenn die normale Leistung bis zur Abfahrt nicht reicht. 22 kW
+liegen außerhalb dieser Beta. Einheiten, Kalenderformat und Sicherheitsgrenzen
+stehen unter [Optionale Fahrzeugplanung](docs/EV_PLANNING.de.md).
 
 ## Entwicklung
 

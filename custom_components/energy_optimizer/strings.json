@@ -25,11 +25,11 @@
       },
       "power": {
         "title": "Live power",
-        "description": "Select power sensors in watts. Multiple load phase sensors are added together.",
+        "description": "Select power sensors in watts. Load phase sensors are added into gross whole-site consumption. If EV planning is enabled, they must include the wallbox and must not be grid-import sensors.",
         "data": {
           "live_pv_power_entity": "PV power",
           "live_grid_power_entity": "Grid import power",
-          "live_load_power_entities": "House load power sensors"
+          "live_load_power_entities": "Gross whole-site load power sensors"
         }
       },
       "energy": {
@@ -55,9 +55,85 @@
           "weather_forecast_entity": "Weather forecast",
           "victron_modbus_host": "Victron GX Modbus TCP host"
         }
+      },
+      "ev": {
+        "title": "Electric vehicle planning",
+        "description": "Optional. This beta calculates a charging schedule but never controls the wallbox.",
+        "data": {
+          "ev_enabled": "Enable EV observation and planning"
+        }
+      },
+      "ev_details": {
+        "title": "Electric vehicle inputs",
+        "description": "The gross load sensors selected earlier must include house and wallbox consumption; they are not grid-import sensors. This beta only observes. Normal charging defaults to 3.6 kW and automatic recommendations never exceed 11 kW.",
+        "data": {
+          "site_meter_includes_ev": "I confirm that gross site load includes the wallbox",
+          "ev_live_power_entity": "Wallbox live power (W)",
+          "ev_energy_entity": "Wallbox cumulative energy (kWh)",
+          "ev_connected_entity": "Vehicle connected",
+          "ev_vehicle_soc_entity": "Vehicle battery state of charge (%)",
+          "ev_calendar_entity": "Departure calendar (distance_km in description)",
+          "ev_normal_charge_power_kw": "Normal charging power",
+          "ev_boost_charge_power_kw": "Maximum automatic boost power",
+          "ev_battery_capacity_kwh": "Usable vehicle battery capacity",
+          "ev_consumption_kwh_per_100km": "Vehicle consumption",
+          "ev_reserve_km": "Required range reserve after each trip",
+          "ev_charge_efficiency": "Wallbox-to-battery efficiency (0 to 1)",
+          "site_max_import_power_kw": "Maximum site import power"
+        }
       }
     },
-    "abort": {"already_configured": "The energy optimizer is already configured."}
+    "abort": {"already_configured": "The energy optimizer is already configured."},
+    "error": {
+      "ev_topology_not_confirmed": "Confirm that the site/main meter includes the wallbox before enabling EV planning.",
+      "ev_submeter_conflicts_site": "Use dedicated wallbox power and energy entities; a site, grid, PV or battery entity cannot also be the EV submeter.",
+      "ev_input_entities_conflict": "Wallbox power, wallbox energy and vehicle state of charge must be three distinct sensors.",
+      "ev_live_power_unit": "The wallbox live-power sensor must use W.",
+      "ev_energy_unit": "The wallbox cumulative-energy sensor must use kWh.",
+      "ev_soc_unit": "The vehicle state-of-charge sensor must use %.",
+      "ev_boost_below_normal": "Boost power must be at least the normal charging power.",
+      "ev_site_limit_below_normal": "The site import limit must support the normal charging power."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Electric vehicle planning",
+        "description": "Enable, disable or edit optional EV observation. This beta never controls the wallbox.",
+        "data": {
+          "ev_enabled": "Enable EV observation and planning"
+        }
+      },
+      "ev_details": {
+        "title": "Electric vehicle inputs",
+        "description": "The gross load sensors must include house and wallbox consumption and must not be grid-import sensors. This beta only observes; automatic recommendations never exceed 11 kW.",
+        "data": {
+          "site_meter_includes_ev": "I confirm that gross site load includes the wallbox",
+          "ev_live_power_entity": "Wallbox live power (W)",
+          "ev_energy_entity": "Wallbox cumulative energy (kWh)",
+          "ev_connected_entity": "Vehicle connected",
+          "ev_vehicle_soc_entity": "Vehicle battery state of charge (%)",
+          "ev_calendar_entity": "Departure calendar (distance_km in description)",
+          "ev_normal_charge_power_kw": "Normal charging power",
+          "ev_boost_charge_power_kw": "Maximum automatic boost power",
+          "ev_battery_capacity_kwh": "Usable vehicle battery capacity",
+          "ev_consumption_kwh_per_100km": "Vehicle consumption",
+          "ev_reserve_km": "Required range reserve after each trip",
+          "ev_charge_efficiency": "Wallbox-to-battery efficiency (0 to 1)",
+          "site_max_import_power_kw": "Maximum site import power"
+        }
+      }
+    },
+    "error": {
+      "ev_topology_not_confirmed": "Confirm that the site/main meter includes the wallbox before enabling EV planning.",
+      "ev_submeter_conflicts_site": "Use dedicated wallbox power and energy entities; a site, grid, PV or battery entity cannot also be the EV submeter.",
+      "ev_input_entities_conflict": "Wallbox power, wallbox energy and vehicle state of charge must be three distinct sensors.",
+      "ev_live_power_unit": "The wallbox live-power sensor must use W.",
+      "ev_energy_unit": "The wallbox cumulative-energy sensor must use kWh.",
+      "ev_soc_unit": "The vehicle state-of-charge sensor must use %.",
+      "ev_boost_below_normal": "Boost power must be at least the normal charging power.",
+      "ev_site_limit_below_normal": "The site import limit must support the normal charging power."
+    }
   },
   "entity": {
     "sensor": {
@@ -74,7 +150,15 @@
       "expected_grid_charge": {"name": "Expected battery grid charge 48 h"},
       "target_charge_current": {"name": "Target charge current"},
       "target_grid_setpoint": {"name": "Command grid setpoint"},
-      "projected_min_soc": {"name": "Projected lowest SoC"}
+      "projected_min_soc": {"name": "Projected lowest SoC"},
+      "ev_status": {"name": "EV observation plan", "state": {"disabled": "Disabled", "awaiting_trip": "No upcoming trip", "awaiting_horizon": "Waiting for planning horizon", "awaiting_data": "Waiting for data", "ready": "Range target met", "scheduled": "Charging recommendation ready", "infeasible": "Target cannot be met"}},
+      "ev_next_departure": {"name": "Next EV departure"},
+      "ev_required_wallbox_energy": {"name": "Required EV charging energy"},
+      "ev_target_soc": {"name": "EV target SoC"},
+      "ev_suggested_power": {"name": "Suggested EV charging power"},
+      "ev_suggested_mode": {"name": "Suggested EV charging mode", "state": {"idle": "Idle", "normal": "Normal", "boost": "Boost", "degraded": "Safe fallback"}},
+      "ev_plan_feasible": {"name": "EV plan feasibility", "state": {"unknown": "Unknown", "feasible": "Feasible", "infeasible": "Infeasible"}},
+      "ev_data_quality": {"name": "EV data coverage"}
     }
   }
 }

@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
 import importlib.util
-from pathlib import Path
 import unittest
-
+from datetime import datetime, timezone
+from pathlib import Path
 
 _PATH = Path(__file__).parents[1] / "custom_components" / "energy_optimizer" / "price_adapter.py"
 _SPEC = importlib.util.spec_from_file_location("price_adapter_under_test", _PATH)
@@ -36,7 +35,12 @@ class PriceAdapterTests(unittest.TestCase):
 
     def test_invalid_and_cent_values_are_rejected(self) -> None:
         result = _MODULE.extract_price_timeline(
-            {"raw_today": [{"start": "bad", "value": 0.2}, {"start": "2026-09-13T10:00:00Z", "value": 21.0}]},
+            {
+                "raw_today": [
+                    {"start": "bad", "value": 0.2},
+                    {"start": "2026-09-13T10:00:00Z", "value": 21.0},
+                ]
+            },
             lambda value: value,
         )
         self.assertEqual(result, {})

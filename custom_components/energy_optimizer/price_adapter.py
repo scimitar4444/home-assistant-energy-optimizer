@@ -37,11 +37,19 @@ def extract_price_timeline(
         if not isinstance(row, Mapping):
             continue
         timestamp = next(
-            (row[key] for key in ("start_time", "startsAt", "start", "datetime") if row.get(key) is not None),
+            (
+                row[key]
+                for key in ("start_time", "startsAt", "start", "datetime")
+                if row.get(key) is not None
+            ),
             None,
         )
         raw_price = next(
-            (row[key] for key in ("price_per_kwh", "total", "value", "price") if row.get(key) is not None),
+            (
+                row[key]
+                for key in ("price_per_kwh", "total", "value", "price")
+                if row.get(key) is not None
+            ),
             None,
         )
         try:
