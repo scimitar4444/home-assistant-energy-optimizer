@@ -1,6 +1,6 @@
 [project]
 name = "home-assistant-energy-optimizer"
-version = "0.1.0b6"
+version = "0.1.0b7"
 description = "Deterministic 48-hour energy optimizer for Home Assistant"
 requires-python = ">=3.13"
 license = "MIT"

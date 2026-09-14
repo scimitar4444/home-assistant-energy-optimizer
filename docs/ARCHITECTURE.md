@@ -18,6 +18,27 @@ HA entities and recorder statistics
 
 The dynamic program minimizes grid energy cost and optional battery wear while respecting SoC, efficiency and power limits. It has no learned weights, neural network or external inference endpoint.
 
+The measured SoC is the initial energy state, not merely a display value. Each
+quarter-hour then balances PV to load, PV to battery, battery to load, grid to
+load and optional confirmed grid charging. Historical load and weather data are
+cached; the normal path performs one dynamic-programming pass. Only a flexible
+load supplied by an adapter requires a second pass over the combined load.
+
+Where a trusted daily PV total exists, weather redistributes it between the
+quarter-hours. Beyond the available daily forecast, the integration takes a
+seasonal historical plant baseline and corrects its total with future sun
+position, cloud cover and rain. Missing weather is blended back
+toward history instead of being interpreted as clear sky.
+
+## Generic flexible-load interface
+
+Future adapters for EVs, climate systems and appliances can describe an energy
+budget, minimum and maximum power, earliest start and completion deadline. A
+calendar occurrence can supply or move that deadline. The interface only
+returns eligible planning slots; it never authorizes a device by itself.
+Measurement validity, confirmed prices and an adapter-specific safety layer
+remain mandatory before actuation.
+
 ## Optional EV observation adapter
 
 The optional EV subsystem is deliberately outside the authoritative dispatch

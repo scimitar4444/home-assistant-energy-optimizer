@@ -9,6 +9,7 @@ from datetime import date, datetime, timedelta
 from functools import partial
 from math import isfinite
 from statistics import mean, median
+from time import monotonic
 from typing import Any
 
 from homeassistant.components.recorder import get_instance
@@ -49,6 +50,7 @@ from .load_model import (
     forecast_level_calibration,
     non_shiftable_load,
     solar_brightness,
+    weather_adjusted_daily_pv,
 )
 from .optimizer import ForecastSlot, optimize_battery
 from .price_adapter import extract_price_timeline
@@ -109,6 +111,20 @@ def _grid_charge_slot_limit_kw(
     """Scale the synthetic first quarter-hour to its real remaining duration."""
     fraction = first_slot_fraction if slot_index == 0 else 1.0
     return max(0.0, maximum_power_kw) * max(0.0, min(1.0, fraction))
+
+
+def _weather_fallback_days(
+    slot_times: list[datetime],
+    tomorrow_day: date,
+) -> list[date]:
+    """Return horizon days not covered by the two PV forecast sensors."""
+    return sorted(
+        {
+            slot_time.date()
+            for slot_time in slot_times
+            if slot_time.date() > tomorrow_day
+        }
+    )
 
 
 def _next_flow_block_start(
@@ -240,6 +256,7 @@ class EnergyOptimizerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._weather_forecast_by_moment: dict[datetime, WeatherSample] = {}
         self._weather_forecast_refreshed_at: datetime | None = None
         self._weather_forecast_source_count = 0
+        self._pv_daily_forecast_diagnostics: dict[str, dict[str, Any]] = {}
         self._pv_samples: dict[tuple[int, bool, int], list[float]] = defaultdict(list)
         self._price_samples: dict[tuple[int, bool, int], list[float]] = defaultdict(list)
         self._recent_price_samples: dict[tuple[bool, int], list[float]] = (
@@ -680,6 +697,44 @@ class EnergyOptimizerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         ]
         return max(0.0, median(comparable)) if comparable else 0.0
 
+    def _weather_adjusted_future_pv(
+        self,
+        target_day: date,
+        historical_baseline_kwh: float,
+        timezone_info: Any,
+    ) -> tuple[float, float, float]:
+        """Correct a seasonal plant baseline with future weather."""
+        weighted_brightness: list[tuple[float, float | None]] = []
+        day_start = datetime.combine(target_day, datetime.min.time(), timezone_info)
+        for quarter_index in range(96):
+            moment = day_start + timedelta(minutes=15 * quarter_index)
+            weight = max(
+                0.0,
+                self._median_profile(
+                    self._pv_samples,
+                    moment.month,
+                    moment.weekday() >= 5,
+                    moment.hour,
+                    0.0,
+                ),
+            )
+            weather = self._weather_for(moment)
+            brightness = (
+                solar_brightness(
+                    moment,
+                    weather,
+                    self.hass.config.latitude,
+                    self.hass.config.longitude,
+                )
+                if weather is not None
+                else None
+            )
+            weighted_brightness.append((weight, brightness))
+        return weather_adjusted_daily_pv(
+            historical_baseline_kwh,
+            weighted_brightness,
+        )
+
     def _historical_remaining_pv(
         self, now: datetime, first_slot_fraction: float
     ) -> float:
@@ -1064,24 +1119,55 @@ class EnergyOptimizerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             today_sensor = None
         if tomorrow_sensor is not None and not 0 <= tomorrow_sensor <= 100:
             tomorrow_sensor = None
-        pv_forecast_fallback = today_sensor is None or tomorrow_sensor is None
         today_remaining = (
             self._historical_remaining_pv(now, first_slot_fraction)
             if today_sensor is None
             else max(0.0, today_sensor)
         )
-        tomorrow = (
-            self._historical_daily_pv((now + timedelta(days=1)).date())
-            if tomorrow_sensor is None
-            else max(0.0, tomorrow_sensor)
-        )
+        tomorrow_day = (now + timedelta(days=1)).date()
+        self._pv_daily_forecast_diagnostics = {}
+        if tomorrow_sensor is None:
+            tomorrow_baseline = self._historical_daily_pv(tomorrow_day)
+            tomorrow, factor, coverage = self._weather_adjusted_future_pv(
+                tomorrow_day,
+                tomorrow_baseline,
+                now.tzinfo,
+            )
+            self._pv_daily_forecast_diagnostics[tomorrow_day.isoformat()] = {
+                "source": "weather_corrected_history",
+                "factor": round(factor, 3),
+                "weather_coverage": round(coverage, 3),
+            }
+        else:
+            tomorrow = max(0.0, tomorrow_sensor)
+            self._pv_daily_forecast_diagnostics[tomorrow_day.isoformat()] = {
+                "source": "solar_forecast",
+                "factor": 1.0,
+                "weather_coverage": 1.0,
+            }
         pv_forecast: dict[date, float] = {
             now.date(): today_remaining,
-            (now + timedelta(days=1)).date(): tomorrow,
+            tomorrow_day: tomorrow,
         }
-        for day_offset in range(2, 4):
-            day = (now + timedelta(days=day_offset)).date()
-            pv_forecast[day] = self._historical_daily_pv(day)
+        weather_fallback_days = _weather_fallback_days(slot_times, tomorrow_day)
+        for day in weather_fallback_days:
+            baseline = self._historical_daily_pv(day)
+            adjusted, factor, coverage = self._weather_adjusted_future_pv(
+                day,
+                baseline,
+                now.tzinfo,
+            )
+            pv_forecast[day] = adjusted
+            self._pv_daily_forecast_diagnostics[day.isoformat()] = {
+                "source": "weather_corrected_history",
+                "factor": round(factor, 3),
+                "weather_coverage": round(coverage, 3),
+            }
+        pv_forecast_fallback = (
+            today_sensor is None
+            or tomorrow_sensor is None
+            or bool(weather_fallback_days)
+        )
 
         pv_raw_weights: list[float] = []
         pv_weight_totals: dict[date, float] = defaultdict(float)
@@ -1330,6 +1416,7 @@ class EnergyOptimizerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         slots: list[ForecastSlot],
         *,
         initial_planned_power_kw: list[float] | None = None,
+        baseline_dispatch_plan: list[dict[str, Any]] | None = None,
     ) -> tuple[list[ForecastSlot], dict[str, str]]:
         jobs: list[PendingApplianceJob] = []
         for name, settings in self.config.appliances.items():
@@ -1355,9 +1442,15 @@ class EnergyOptimizerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             export_eur_kwh=self.config.export_eur_kwh,
             max_combined_power_kw=MAX_COMBINED_APPLIANCE_AVERAGE_POWER_KW,
             initial_planned_power_kw=initial_planned_power_kw,
+            baseline_dispatch_plan=baseline_dispatch_plan,
+            battery_capacity_kwh=self.config.battery_capacity_kwh,
+            hard_min_soc=self.config.hard_min_soc,
+            discharge_efficiency=DEFAULT_BATTERY_CHARGE_EFFICIENCY,
+            battery_wear_eur_kwh=self.config.battery_wear_eur_kwh,
         )
 
     async def _async_update_data(self) -> dict[str, Any]:
+        calculation_started = monotonic()
         now = dt_util.now()
         if self._history_refresh_date != now.date():
             await self._async_refresh_history()
@@ -1382,9 +1475,28 @@ class EnergyOptimizerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 observed_at=now,
                 first_slot_uses_live_house_power=live is not None,
             )
+            measured_soc = self._optional_numeric_state(self.config.soc_entity)
+            soc_is_valid = measured_soc is not None and 0 <= measured_soc <= 100
+            # Keep the diagnostic forecast available when the BMS emits its
+            # known 65535/missing sentinel. The command path remains fail-safe.
+            soc = measured_soc if soc_is_valid else self.config.hard_min_soc
+            optimizer_call = partial(
+                optimize_battery,
+                current_soc=soc,
+                capacity_kwh=self.config.battery_capacity_kwh,
+                hard_min_soc=self.config.hard_min_soc,
+                battery_wear_eur_kwh=self.config.battery_wear_eur_kwh,
+                export_eur_kwh=self.config.export_eur_kwh,
+                grid_charge_margin_eur_kwh=self.config.grid_charge_margin_eur_kwh,
+                pv_curtailment_penalty_eur_kwh=self.config.pv_curtailment_penalty_eur_kwh,
+            )
+            baseline_result = await self.hass.async_add_executor_job(
+                partial(optimizer_call, slots)
+            )
             slots, schedules = self._schedule_pending_jobs(
                 slots,
                 initial_planned_power_kw=running_power_kw,
+                baseline_dispatch_plan=baseline_result.plan,
             )
             try:
                 ev_plan = await self._ev_observation.async_plan(
@@ -1403,13 +1515,6 @@ class EnergyOptimizerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                         "suggested_mode": "degraded",
                     }
                 )
-            measured_soc = self._optional_numeric_state(self.config.soc_entity)
-            soc_is_valid = measured_soc is not None and 0 <= measured_soc <= 100
-            # Keep the diagnostic forecast available when the BMS emits its
-            # known 65535/missing sentinel.  The command builder still sees
-            # the invalid raw value and immediately selects DEGRADED; the
-            # optimizer itself receives the hard minimum as a harmless input.
-            soc = measured_soc if soc_is_valid else self.config.hard_min_soc
             price_ratio = known_count / len(slots)
             confidence = round(
                 100
@@ -1419,18 +1524,12 @@ class EnergyOptimizerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     + (0.20 if not pv_forecast_fallback else 0.08)
                 )
             )
-            result = await self.hass.async_add_executor_job(
-                partial(
-                    optimize_battery,
-                    slots,
-                    soc,
-                    capacity_kwh=self.config.battery_capacity_kwh,
-                    hard_min_soc=self.config.hard_min_soc,
-                    battery_wear_eur_kwh=self.config.battery_wear_eur_kwh,
-                    export_eur_kwh=self.config.export_eur_kwh,
-                    grid_charge_margin_eur_kwh=self.config.grid_charge_margin_eur_kwh,
-                    pv_curtailment_penalty_eur_kwh=self.config.pv_curtailment_penalty_eur_kwh,
+            result = (
+                await self.hass.async_add_executor_job(
+                    partial(optimizer_call, slots)
                 )
+                if schedules
+                else baseline_result
             )
         except (KeyError, TypeError, ValueError) as error:
             raise UpdateFailed(f"Optimization failed: {error}") from error
@@ -1623,6 +1722,10 @@ class EnergyOptimizerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "control_command": command.as_dict(),
             "pv_headroom_active": pv_headroom_active,
             "confidence": confidence,
+            "calculation_duration_seconds": round(
+                monotonic() - calculation_started, 3
+            ),
+            "optimizer_passes": 2 if schedules else 1,
             "forecast_load_48h": round(sum(slot.load_kwh for slot in slots), 2),
             "forecast_load_robust_48h": round(
                 robust_load_total + scheduled_energy + running_forecast_energy,
@@ -1656,6 +1759,7 @@ class EnergyOptimizerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             ),
             "forecast_pv_48h": round(sum(slot.pv_kwh for slot in slots), 2),
             "pv_forecast_fallback": pv_forecast_fallback,
+            "pv_daily_forecast_diagnostics": self._pv_daily_forecast_diagnostics,
             "known_price_slots": known_count,
             "estimated_price_slots": len(slots) - known_count,
             "recent_price_average": (

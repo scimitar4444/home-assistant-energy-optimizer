@@ -435,10 +435,17 @@ class OptimizerSensor(CoordinatorEntity[EnergyOptimizerCoordinator], SensorEntit
                 "forecast_base_ceiling_48h"
             ),
             "robuste_niveaukorrektur": data.get("robust_level_factor", 1.0),
+            "berechnungsdauer_sekunden": data.get(
+                "calculation_duration_seconds"
+            ),
+            "optimiererdurchlaeufe": data.get("optimizer_passes", 1),
             "wetterprognosestunden": data.get("weather_forecast_hours", 0),
             "wettermerkmale_aktiv": data.get("weather_inputs_active", False),
             "pv_prognose_ersatzwert_aktiv": data.get(
                 "pv_forecast_fallback", False
+            ),
+            "pv_tagesprognose_quellen": data.get(
+                "pv_daily_forecast_diagnostics", {}
             ),
             "erwartete_kosten_eur": data["expected_cost"],
             "netzbedarf_erste_24h_kwh": data.get(

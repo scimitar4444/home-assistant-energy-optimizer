@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.1.0-beta.7 - 2026-09-14
+
+- The 48-hour model explicitly starts from the current battery SoC and values
+  flexible loads against the same battery/PV dispatch instead of tariff alone.
+- When a daily PV forecast is unavailable beyond tomorrow, the seasonal
+  historical baseline is corrected with future sun position, cloud-cover and
+  rain forecasts.
+- Added a vendor-neutral interruptible-load interface with energy budget,
+  power limits, earliest start and calendar-compatible completion deadline for
+  future EV, climate and appliance adapters. It does not actuate devices.
+- Kept the normal calculation path at one dynamic-programming pass; a second
+  pass is used only when a flexible appliance is actually scheduled.
+- Exposed calculation duration, optimizer-pass count and the source, weather
+  coverage and correction factor of each fallback PV day as diagnostics.
+
 ## 0.1.0-beta.6 - 2026-09-13
 
 - Grid charging now starts only at a quarter-hour boundary and remains one

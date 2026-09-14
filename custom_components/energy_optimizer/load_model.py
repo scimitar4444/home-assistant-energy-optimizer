@@ -103,4 +103,43 @@ def solar_brightness(
         return max(0.0, min(1.25, illuminance / clear_sky_lux))
     cloud = sample.cloud_percent if sample else None
     cloud_fraction = max(0.0, min(1.0, cloud / 100)) if cloud is not None else 0.5
-    return max(0.0, 1.0 - 0.80 * cloud_fraction)
+    rain = sample.rain_fraction if sample else None
+    rain_fraction = max(0.0, min(1.0, rain)) if rain is not None else 0.0
+    cloud_factor = max(0.0, 1.0 - 0.80 * cloud_fraction)
+    return cloud_factor * (1.0 - 0.20 * rain_fraction)
+
+
+def weather_adjusted_daily_pv(
+    historical_baseline_kwh: float,
+    weighted_brightness: list[tuple[float, float | None]],
+    *,
+    reference_weather_multiplier: float = 0.76,
+    minimum_factor: float = 0.40,
+    maximum_factor: float = 1.35,
+) -> tuple[float, float, float]:
+    """Correct a seasonal PV baseline with a future weather forecast.
+
+    ``weighted_brightness`` contains the installation's historic PV shape and
+    the forecast brightness for each interval. Missing weather is blended back
+    toward the historical baseline instead of being treated as clear sky.
+    Returns adjusted kWh, applied factor and daylight-weighted coverage.
+    """
+    baseline = max(0.0, historical_baseline_kwh)
+    total_weight = sum(max(0.0, weight) for weight, _ in weighted_brightness)
+    known_weight = sum(
+        max(0.0, weight)
+        for weight, brightness in weighted_brightness
+        if brightness is not None
+    )
+    if baseline <= 0 or total_weight <= 0 or known_weight <= 0:
+        return baseline, 1.0, 0.0
+    forecast_multiplier = sum(
+        max(0.0, weight) * (0.40 + 0.60 * max(0.0, min(1.25, brightness)))
+        for weight, brightness in weighted_brightness
+        if brightness is not None
+    ) / known_weight
+    coverage = max(0.0, min(1.0, known_weight / total_weight))
+    raw_factor = forecast_multiplier / max(0.01, reference_weather_multiplier)
+    blended_factor = 1.0 + coverage * (raw_factor - 1.0)
+    factor = max(minimum_factor, min(maximum_factor, blended_factor))
+    return baseline * factor, factor, coverage

@@ -23,6 +23,28 @@ Batterieverschleiß. Dabei berücksichtigt es SoC, Wirkungsgrade und
 Leistungsgrenzen. Es verwendet keine gelernten Gewichte, kein neuronales Netz
 und keinen externen Inferenz-Endpunkt.
 
+Der gemessene SoC ist der Startzustand der Energierechnung und nicht nur ein
+Anzeigewert. Danach bilanziert jedes Viertelstundenintervall PV → Haus,
+PV → Batterie, Batterie → Haus, Netz → Haus und optional bestätigtes
+Netzladen. Historie und Wetter werden zwischengespeichert. Im Normalfall läuft
+der dynamische Optimierer einmal; nur eine von einem Adapter bereitgestellte
+flexible Last benötigt einen zweiten Durchlauf mit der gemeinsamen Last.
+
+Liegt eine verlässliche PV-Tagessumme vor, verteilt das Wetter sie auf die
+Viertelstunden. Fehlt für einen späteren Tag die Tagessumme, wird die saisonale
+Anlagenhistorie zusätzlich mit zukünftiger Sonnenhöhe, Bewölkung und Regen
+korrigiert. Fehlendes Wetter wird neutral zur Historie zurückgemischt und nicht
+als klarer Himmel behandelt.
+
+## Allgemeine Schnittstelle für flexible Lasten
+
+Spätere Adapter für Auto, Klimaanlage und Haushaltsgeräte können Energiebedarf,
+minimale und maximale Leistung, frühesten Start und Fertigstellungsfrist
+angeben. Ein Kalendertermin kann diese Frist liefern oder verschieben. Die
+Schnittstelle liefert nur zulässige Planungsintervalle und schaltet selbst kein
+Gerät. Vor einer Ausführung bleiben gültige Messwerte, bestätigte Preise und
+eine gerätespezifische Sicherheitsebene erforderlich.
+
 ## Optionaler EV-Beobachtungsadapter
 
 Das optionale EV-Subsystem liegt in der aktuellen Beta bewusst außerhalb des

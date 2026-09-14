@@ -17,7 +17,13 @@ Er verwendet **kein LLM, keine Cloud‑KI und keine Online‑Modellberechnung**.
 - getrennte Bilanz für PV → Haus, PV → Batterie, Batterie → Haus und Netz;
 - einstellbare Batteriekapazität, harte Entladegrenze, Wirkungsgrade, Ladeleistung und optionaler Batterieverschleiß;
 - robuste Grundlastprognose aus Home‑Assistant‑Langzeitstatistiken;
-- PV‑Restprognose für heute und morgen, ersatzweise saisonale Historie;
+- jede Planung beginnt beim gemessenen Batterie‑SoC und berücksichtigt
+  nutzbare Energie, Wirkungsgrad sowie Lade- und Entladegrenzen;
+- PV‑Restprognose für heute und morgen; für fehlende spätere Tagessummen wird
+  die saisonale Historie mit prognostizierter Sonnenhöhe, Bewölkung und Regen
+  korrigiert;
+- nicht schaltende, herstellerneutrale Schnittstelle für unterbrechbare Auto-,
+  Klima- und Gerätelasten mit Leistungsgrenzen und Kalenderfrist;
 - optionale, herstellerneutrale Fahrzeugplanung mit Kalenderfrist;
 - deutsche und englische Sensorbezeichnungen;
 - optionale, rückgelesene Victron‑Modbus‑TCP‑Dienste für erfahrene Nutzer.

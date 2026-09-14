@@ -49,6 +49,44 @@ class LoadModelTests(unittest.TestCase):
         weather = _MODULE.WeatherSample(cloud_percent=0)
         self.assertEqual(_MODULE.solar_brightness(moment, weather, 50.1, 8.7), 0.0)
 
+    def test_future_clear_weather_raises_historical_pv_baseline(self) -> None:
+        adjusted, factor, coverage = _MODULE.weather_adjusted_daily_pv(
+            10.0, [(1.0, 1.0)] * 8
+        )
+        self.assertGreater(adjusted, 10.0)
+        self.assertAlmostEqual(adjusted, 10.0 * factor)
+        self.assertEqual(coverage, 1.0)
+
+    def test_future_overcast_weather_reduces_historical_pv_baseline(self) -> None:
+        adjusted, factor, coverage = _MODULE.weather_adjusted_daily_pv(
+            10.0, [(1.0, 0.2)] * 8
+        )
+        self.assertLess(adjusted, 10.0)
+        self.assertLess(factor, 1.0)
+        self.assertEqual(coverage, 1.0)
+
+    def test_partial_weather_coverage_blends_toward_history(self) -> None:
+        full, full_factor, _ = _MODULE.weather_adjusted_daily_pv(
+            10.0, [(1.0, 1.0)] * 8
+        )
+        partial, partial_factor, coverage = _MODULE.weather_adjusted_daily_pv(
+            10.0, [(1.0, 1.0)] * 4 + [(1.0, None)] * 4
+        )
+        self.assertGreater(partial, 10.0)
+        self.assertLess(partial, full)
+        self.assertLess(partial_factor, full_factor)
+        self.assertEqual(coverage, 0.5)
+
+    def test_rain_reduces_brightness_when_lux_is_unavailable(self) -> None:
+        moment = datetime.fromisoformat("2026-06-21T12:00:00+02:00")
+        dry = _MODULE.WeatherSample(cloud_percent=20, rain_fraction=0.0)
+        wet = _MODULE.WeatherSample(cloud_percent=20, rain_fraction=1.0)
+
+        self.assertLess(
+            _MODULE.solar_brightness(moment, wet, 50.1, 8.7),
+            _MODULE.solar_brightness(moment, dry, 50.1, 8.7),
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

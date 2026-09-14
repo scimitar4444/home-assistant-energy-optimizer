@@ -10,5 +10,5 @@
   "issue_tracker": "https://github.com/scimitar4444/home-assistant-energy-optimizer/issues",
   "requirements": [],
   "single_config_entry": true,
-  "version": "0.1.0-beta.6"
+  "version": "0.1.0-beta.7"
 }

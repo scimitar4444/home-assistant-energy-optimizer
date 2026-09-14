@@ -34,6 +34,7 @@ _PLANNING = _load_module("appliance_planning")
 ForecastSlot = _OPTIMIZER.ForecastSlot
 PendingApplianceJob = _PLANNING.PendingApplianceJob
 RunningApplianceJob = _PLANNING.RunningApplianceJob
+InterruptibleLoadRequest = _PLANNING.InterruptibleLoadRequest
 
 
 def _slots(
@@ -116,6 +117,155 @@ class PendingApplianceTests(unittest.TestCase):
         )
 
         self.assertNotEqual(schedules["first"], schedules["second"])
+
+
+class FlexibleLoadPlanningTests(unittest.TestCase):
+    """Flexible loads share the battery-aware quarter-hour horizon."""
+
+    def test_joint_cost_uses_real_battery_buffer_for_earlier_start(self) -> None:
+        slots = _slots(3, price=0.50, load=0.10, pv=0.0)
+        baseline_plan = [
+            {"soc_end": 50.0, "pv_export_kwh": 0.0} for _ in slots
+        ]
+        job = PendingApplianceJob("dishwasher", 0.20, 1, 0, 23)
+
+        _, schedules = _PLANNING.schedule_pending_jobs(
+            slots,
+            [job],
+            export_eur_kwh=0.0,
+            max_combined_power_kw=2.5,
+            max_start_slots=2,
+            baseline_dispatch_plan=baseline_plan,
+            battery_capacity_kwh=5.0,
+            hard_min_soc=12.0,
+            discharge_efficiency=0.94,
+        )
+
+        self.assertEqual(schedules["dishwasher"], slots[0].start)
+
+    def test_joint_cost_uses_only_dispatchable_pv_surplus(self) -> None:
+        slots = _slots(2, price=0.50, load=0.10, pv=0.0)
+        slots[1] = ForecastSlot(slots[1].start, 0.10, 0.10, 0.0)
+        baseline_plan = [
+            {"soc_end": 12.0, "pv_export_kwh": 0.20},
+            {"soc_end": 12.0, "pv_export_kwh": 0.0},
+        ]
+        job = PendingApplianceJob("dishwasher", 0.20, 1, 0, 23)
+
+        _, schedules = _PLANNING.schedule_pending_jobs(
+            slots,
+            [job],
+            export_eur_kwh=0.0,
+            max_combined_power_kw=2.5,
+            max_start_slots=2,
+            baseline_dispatch_plan=baseline_plan,
+            battery_capacity_kwh=5.0,
+            hard_min_soc=12.0,
+            discharge_efficiency=0.94,
+        )
+
+        self.assertEqual(schedules["dishwasher"], slots[0].start)
+
+    def test_calendar_deadline_bounds_interruptible_load_slots(self) -> None:
+        slots = _slots(8)
+        start = datetime.fromisoformat(slots[0].start)
+        request = InterruptibleLoadRequest(
+            name="room_climate",
+            energy_budget_kwh=0.8,
+            earliest_start=start + timedelta(minutes=15),
+            finish_by=start + timedelta(hours=1),
+            minimum_power_kw=0.3,
+            maximum_power_kw=1.2,
+            minimum_run_slots=2,
+        )
+
+        candidates = _PLANNING.interruptible_candidate_slots(slots, request)
+
+        self.assertEqual(candidates, [1, 2, 3])
+
+    def test_fixed_cycle_must_finish_by_calendar_deadline(self) -> None:
+        slots = _slots(8, price=0.50)
+        slots[1] = ForecastSlot(slots[1].start, 0.20, 0.10, 0.0)
+        slots[2] = ForecastSlot(slots[2].start, 0.01, 0.10, 0.0)
+        start = datetime.fromisoformat(slots[0].start)
+        job = PendingApplianceJob(
+            "washer",
+            0.20,
+            2,
+            0,
+            23,
+            requested_at=start,
+            finish_by=start + timedelta(minutes=45),
+        )
+
+        _, schedules = _PLANNING.schedule_pending_jobs(
+            slots,
+            [job],
+            export_eur_kwh=0.0,
+            max_combined_power_kw=2.5,
+            max_start_slots=8,
+        )
+
+        self.assertEqual(schedules["washer"], slots[1].start)
+
+    def test_complete_cycle_can_be_kept_out_of_quiet_hours(self) -> None:
+        slots = _slots(
+            8,
+            start=datetime(2026, 9, 14, 20, tzinfo=timezone.utc),
+            price=0.50,
+        )
+        job = PendingApplianceJob(
+            "dryer",
+            0.8,
+            8,
+            6,
+            20,
+            latest_finish_hour=21.0,
+        )
+
+        _, schedules = _PLANNING.schedule_pending_jobs(
+            slots,
+            [job],
+            export_eur_kwh=0.0,
+            max_combined_power_kw=2.5,
+            max_start_slots=8,
+        )
+
+        self.assertNotIn("dryer", schedules)
+
+    def test_estimated_price_never_becomes_confirmed_by_deadline(self) -> None:
+        slots = [
+            ForecastSlot(
+                slot.start,
+                slot.price_eur_kwh,
+                slot.load_kwh,
+                slot.pv_kwh,
+                price_is_forecast=True,
+            )
+            for slot in _slots(2)
+        ]
+        job = PendingApplianceJob("dishwasher", 0.10, 1, 0, 23)
+
+        confirmation = _PLANNING.scheduled_job_price_confirmation(
+            slots,
+            [job],
+            {"dishwasher": slots[0].start},
+        )
+
+        self.assertEqual(confirmation, {"dishwasher": False})
+
+    def test_persisted_request_time_survives_restart_timestamp(self) -> None:
+        requested = datetime(2026, 1, 1, 10, tzinfo=timezone.utc)
+        restored = datetime(2026, 1, 1, 12, tzinfo=timezone.utc)
+
+        self.assertEqual(
+            _PLANNING.fixed_request_timestamp(
+                requested,
+                pause_active=True,
+                observed_transition_at=restored,
+            ),
+            requested,
+        )
 
 
 class RunningApplianceTests(unittest.TestCase):

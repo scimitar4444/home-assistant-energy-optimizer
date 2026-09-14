@@ -17,7 +17,13 @@ It does **not** use an LLM, cloud AI or online inference. All calculations run l
 - models PV-to-load, PV-to-battery, battery-to-load and grid flows separately;
 - includes configurable battery capacity, minimum SoC, efficiency, charge power and optional battery wear;
 - learns a robust non-shiftable load profile from Home Assistant long-term statistics;
-- uses remaining-today and tomorrow PV forecasts, with historical seasonal fallback;
+- starts every dispatch from the measured battery SoC and models its usable
+  energy, efficiency and power limits across the full horizon;
+- uses remaining-today and tomorrow PV forecasts; missing later daily totals
+  use a seasonal history baseline corrected by forecast sun position, cloud,
+  and rain;
+- provides a non-actuating, vendor-neutral interface for interruptible EV,
+  climate and appliance loads with power limits and calendar deadlines;
 - optionally plans vendor-neutral EV charging against calendar deadlines;
 - exposes localized English and German sensors and diagnostics;
 - optionally exposes verified Victron Modbus TCP write services for advanced users.
