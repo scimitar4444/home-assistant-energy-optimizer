@@ -72,6 +72,36 @@ sys.modules[_SPEC.name] = _MODULE
 _SPEC.loader.exec_module(_MODULE)
 
 
+class PVForecastSourceTests(unittest.TestCase):
+    def test_one_source_is_named_directly(self) -> None:
+        self.assertEqual(
+            _MODULE._pv_forecast_source(
+                {"2026-09-14": {"source": "solar_forecast"}}
+            ),
+            "solar_forecast",
+        )
+        self.assertEqual(
+            _MODULE._pv_forecast_source(
+                {"2026-09-15": {"source": "weather_corrected_history"}}
+            ),
+            "weather_adjusted",
+        )
+
+    def test_multiple_sources_are_summarized_as_mixed(self) -> None:
+        self.assertEqual(
+            _MODULE._pv_forecast_source(
+                {
+                    "2026-09-14": {"source": "solar_forecast"},
+                    "2026-09-16": {"source": "weather_corrected_history"},
+                }
+            ),
+            "mixed",
+        )
+
+    def test_empty_diagnostics_use_historical_fallback(self) -> None:
+        self.assertEqual(_MODULE._pv_forecast_source({}), "historical")
+
+
 class FutureFlowBlockTests(unittest.TestCase):
     @staticmethod
     def _plan(*flows: float):

@@ -53,6 +53,7 @@ def _load_sensor_module() -> ModuleType:
         icon: str | None = None
         native_unit_of_measurement: str | None = None
         state_class: str | None = None
+        entity_category: str | None = None
 
     class SensorEntity:
         pass
@@ -67,9 +68,11 @@ def _load_sensor_module() -> ModuleType:
 
     constants = _module("homeassistant.const")
     constants.PERCENTAGE = "%"
+    constants.EntityCategory = SimpleNamespace(DIAGNOSTIC="diagnostic")
     constants.UnitOfElectricCurrent = SimpleNamespace(AMPERE="A")
     constants.UnitOfEnergy = SimpleNamespace(KILO_WATT_HOUR="kWh")
     constants.UnitOfPower = SimpleNamespace(WATT="W")
+    constants.UnitOfTime = SimpleNamespace(SECONDS="s")
 
     core = _module("homeassistant.core")
     core.HomeAssistant = type("HomeAssistant", (), {})
@@ -147,6 +150,34 @@ def _ev_data(**overrides):
 class EVSensorTests(unittest.TestCase):
     def setUp(self) -> None:
         self.descriptions = {item.key: item for item in sensor.EV_SENSORS}
+
+    def test_optimizer_diagnostics_are_visible_sensors(self) -> None:
+        descriptions = {item.key: item for item in sensor.SENSORS}
+        self.assertEqual(
+            {
+                "calculation_duration",
+                "optimizer_passes",
+                "pv_forecast_source",
+            },
+            set(descriptions)
+            & {
+                "calculation_duration",
+                "optimizer_passes",
+                "pv_forecast_source",
+            },
+        )
+        data = {
+            "calculation_duration_seconds": 2.34,
+            "optimizer_passes": 2,
+            "pv_forecast_source": "mixed",
+        }
+        self.assertEqual(
+            descriptions["calculation_duration"].value_fn(data), 2.34
+        )
+        self.assertEqual(descriptions["optimizer_passes"].value_fn(data), 2)
+        self.assertEqual(
+            descriptions["pv_forecast_source"].value_fn(data), "mixed"
+        )
 
     def test_ev_sensor_surface_is_complete_and_concise(self) -> None:
         self.assertEqual(

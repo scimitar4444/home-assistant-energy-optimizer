@@ -19,4 +19,6 @@ content: >-
   | Grid charge 48 h | {{ kwh('sensor.ENERGY_OPTIMIZER_EXPECTED_BATTERY_GRID_CHARGE_48_H') }} kWh |
   | Data coverage | {{ states('sensor.ENERGY_OPTIMIZER_DATA_COVERAGE') }} % |
 
+  _Diagnostics: {{ states('sensor.ENERGY_OPTIMIZER_CALCULATION_DURATION') }} s · Optimizer {{ states('sensor.ENERGY_OPTIMIZER_OPTIMIZER_PASSES') }}× · PV: {{ {'solar_forecast': 'forecast', 'weather_adjusted': 'weather + history', 'historical': 'history', 'mixed': 'mixed'}.get(states('sensor.ENERGY_OPTIMIZER_PV_FORECAST_SOURCE'), '–') }}_
+
   _Calculated: {{ state_attr(status, 'calculated_at') or '–' }}_

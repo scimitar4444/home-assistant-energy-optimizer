@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.0-beta.8 - 2026-09-14
+
+- Added dedicated diagnostic sensors for calculation duration, optimizer-pass
+  count and the rolling PV-forecast source.
+- Added the three values to the German and English example dashboards as one
+  compact diagnostic line.
+
 ## 0.1.0-beta.7 - 2026-09-14
 
 - The 48-hour model explicitly starts from the current battery SoC and values

@@ -19,4 +19,6 @@ content: >-
   | Netzladung 48 h | {{ kwh('sensor.ENERGIEOPTIMIERER_ERWARTETE_BATTERIELADUNG_AUS_DEM_NETZ_48_H') }} kWh |
   | Datenabdeckung | {{ states('sensor.ENERGIEOPTIMIERER_DATENABDECKUNG') }} % |
 
+  _Diagnose: {{ states('sensor.ENERGIEOPTIMIERER_BERECHNUNGSDAUER') }} s · Optimierer {{ states('sensor.ENERGIEOPTIMIERER_OPTIMIERERDURCHLAEUFE') }}× · PV: {{ {'solar_forecast': 'Prognose', 'weather_adjusted': 'Wetter + Historie', 'historical': 'Historie', 'mixed': 'gemischt'}.get(states('sensor.ENERGIEOPTIMIERER_PV_PROGNOSEQUELLE'), '–') }}_
+
   _Berechnet: {{ state_attr(status, 'berechnet_um') or '–' }}_

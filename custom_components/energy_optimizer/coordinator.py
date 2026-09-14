@@ -127,6 +127,26 @@ def _weather_fallback_days(
     )
 
 
+def _pv_forecast_source(
+    diagnostics: dict[str, dict[str, Any]],
+) -> str:
+    """Summarize the PV inputs used across the rolling horizon."""
+    sources = {
+        str(item.get("source", "historical"))
+        for item in diagnostics.values()
+    }
+    if not sources:
+        return "historical"
+    if len(sources) > 1:
+        return "mixed"
+    source = sources.pop()
+    return {
+        "weather_corrected_history": "weather_adjusted",
+        "solar_forecast": "solar_forecast",
+        "historical": "historical",
+    }.get(source, "mixed")
+
+
 def _next_flow_block_start(
     plan: list[dict[str, float | str | bool]],
     flow_key: str,
@@ -1125,7 +1145,15 @@ class EnergyOptimizerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             else max(0.0, today_sensor)
         )
         tomorrow_day = (now + timedelta(days=1)).date()
-        self._pv_daily_forecast_diagnostics = {}
+        self._pv_daily_forecast_diagnostics = {
+            now.date().isoformat(): {
+                "source": (
+                    "historical" if today_sensor is None else "solar_forecast"
+                ),
+                "factor": 1.0,
+                "weather_coverage": 0.0 if today_sensor is None else 1.0,
+            }
+        }
         if tomorrow_sensor is None:
             tomorrow_baseline = self._historical_daily_pv(tomorrow_day)
             tomorrow, factor, coverage = self._weather_adjusted_future_pv(
@@ -1759,6 +1787,9 @@ class EnergyOptimizerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             ),
             "forecast_pv_48h": round(sum(slot.pv_kwh for slot in slots), 2),
             "pv_forecast_fallback": pv_forecast_fallback,
+            "pv_forecast_source": _pv_forecast_source(
+                self._pv_daily_forecast_diagnostics
+            ),
             "pv_daily_forecast_diagnostics": self._pv_daily_forecast_diagnostics,
             "known_price_slots": known_count,
             "estimated_price_slots": len(slots) - known_count,

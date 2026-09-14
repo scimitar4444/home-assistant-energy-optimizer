@@ -15,9 +15,11 @@ from homeassistant.components.sensor import (
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import (
     PERCENTAGE,
+    EntityCategory,
     UnitOfElectricCurrent,
     UnitOfEnergy,
     UnitOfPower,
+    UnitOfTime,
 )
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceInfo
@@ -142,6 +144,37 @@ SENSORS = (
         native_unit_of_measurement=PERCENTAGE,
         icon="mdi:battery-arrow-down-outline",
         value_fn=lambda data: data["projected_min_soc"],
+    ),
+    OptimizerSensorDescription(
+        key="calculation_duration",
+        translation_key="calculation_duration",
+        native_unit_of_measurement=UnitOfTime.SECONDS,
+        state_class=SensorStateClass.MEASUREMENT,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        icon="mdi:timer-outline",
+        value_fn=lambda data: data.get("calculation_duration_seconds"),
+    ),
+    OptimizerSensorDescription(
+        key="optimizer_passes",
+        translation_key="optimizer_passes",
+        state_class=SensorStateClass.MEASUREMENT,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        icon="mdi:repeat",
+        value_fn=lambda data: data.get("optimizer_passes", 1),
+    ),
+    OptimizerSensorDescription(
+        key="pv_forecast_source",
+        translation_key="pv_forecast_source",
+        device_class=SensorDeviceClass.ENUM,
+        options=[
+            "solar_forecast",
+            "weather_adjusted",
+            "historical",
+            "mixed",
+        ],
+        entity_category=EntityCategory.DIAGNOSTIC,
+        icon="mdi:weather-partly-cloudy",
+        value_fn=lambda data: data.get("pv_forecast_source", "historical"),
     ),
 )
 
@@ -386,6 +419,14 @@ class OptimizerSensor(CoordinatorEntity[EnergyOptimizerCoordinator], SensorEntit
             "command_grid_setpoint_w": command["grid_setpoint_w"],
             "control_enabled": control_enabled,
             "simulation_mode": not control_enabled,
+            "calculation_duration_seconds": data.get(
+                "calculation_duration_seconds"
+            ),
+            "optimizer_passes": data.get("optimizer_passes", 1),
+            "pv_forecast_source": data.get("pv_forecast_source", "historical"),
+            "pv_daily_forecast_diagnostics": data.get(
+                "pv_daily_forecast_diagnostics", {}
+            ),
             # German legacy keys remain for existing private dashboards.
             "grund": data["reason"],
             "berechnet_um": data["calculated_at"],
